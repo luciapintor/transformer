@@ -1,4 +1,4 @@
-import torch as nn
+import torch 
 from torch.utils.data import Dataset
 
 class ProbeDataset(Dataset):

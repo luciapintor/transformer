@@ -1,4 +1,4 @@
-import torch as nn
+import torch 
 from torch.utils.data import DataLoader
 
 from prepare_dataset.my_dataset import MyDataset

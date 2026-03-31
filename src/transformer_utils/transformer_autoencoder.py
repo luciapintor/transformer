@@ -1,7 +1,7 @@
-import torch as nn
-from torch.nn import Module, Linear, TransformerEncoderLayer, TransformerEncoder, MSELoss
+import torch 
+import torch.nn as nn   
 
-class TransformerAutoencoder(Module):
+class TransformerAutoencoder(nn.Module):
     """
     A simple transformer-based autoencoder for tabular data. The model consists of an input projection layer, 
     a transformer encoder, and a linear decoder. This Transformer is useful if you use sequences, 
@@ -10,14 +10,14 @@ class TransformerAutoencoder(Module):
     def __init__(self, n_features, d_model=32, nhead=4, num_layers=2):
         super().__init__()
         
-        self.input_proj = Linear(n_features, d_model)
+        self.input_proj = nn.Linear(n_features, d_model)
         
-        encoder_layer = TransformerEncoderLayer(
+        encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, batch_first=True
         )
-        self.encoder = TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         
-        self.decoder = Linear(d_model, n_features)
+        self.decoder = nn.Linear(d_model, n_features)
         
     def forward(self, x):
         # x: (batch, features) → treat features as sequence length 1
@@ -30,8 +30,8 @@ class TransformerAutoencoder(Module):
         return out.squeeze(1), z.squeeze(1)  # return reconstruction + embedding
       
 def train(model, dataloader, epochs=10, lr=1e-3):
-    optimizer = nn.optim.Adam(model.parameters(), lr=lr)
-    criterion = MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.MSELoss()
         
     model.train()
         
@@ -55,9 +55,9 @@ def extract_embeddings(model, dataloader):
     model.eval()
     embeddings = []
     
-    with nn.no_grad():
+    with torch.no_grad():
         for x, _ in dataloader:
             _, z = model(x)
             embeddings.append(z)
     
-    return nn.cat(embeddings, dim=0)
+    return torch.cat(embeddings)

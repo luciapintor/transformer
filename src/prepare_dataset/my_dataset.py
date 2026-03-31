@@ -1,12 +1,12 @@
-import torch as nn
+import torch
 from torch.utils.data import Dataset
 
 class MyDataset(Dataset):
   """A simple dataset class that generates random data for demonstration purposes."""  
   def __init__(self, n_samples=1000, n_features=10, n_classes=2):
     super(MyDataset, self).__init__()
-    self.values = nn.randn(n_samples, n_features)  # random features
-    self.labels = nn.randint(0, n_classes, (n_samples,))  # random labels for classification
+    self.values = torch.randn(n_samples, n_features)  # random features
+    self.labels = torch.randint(0, n_classes, (n_samples,))  # random labels for classification
 
   def __len__(self):
     return len(self.values)  # number of samples in the dataset
@@ -22,7 +22,7 @@ class MyDataset(Dataset):
       test_size = total_samples - train_size - val_size
       
       # Use random_split to create the subsets
-      dataset_train, dataset_val, dataset_test = nn.utils.data.random_split(self, [train_size, val_size, test_size])
+      dataset_train, dataset_val, dataset_test = torch.utils.data.random_split(self, [train_size, val_size, test_size])
       
       return dataset_train, dataset_val, dataset_test
     

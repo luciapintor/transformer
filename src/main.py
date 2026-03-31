@@ -1,4 +1,3 @@
-import torch as nn
 from torch.utils.data import DataLoader
 
 from transformer_utils.transformer_autoencoder import TransformerAutoencoder, train, extract_embeddings
