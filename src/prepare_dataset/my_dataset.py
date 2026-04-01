@@ -6,7 +6,7 @@ class MyDataset(Dataset):
   def __init__(self, n_samples=1000, n_features=10, n_classes=2):
     super(MyDataset, self).__init__()
     self.values = torch.randn(n_samples, n_features)  # random features
-    self.labels = torch.randint(0, n_classes, (n_samples,))  # random labels for classification
+    self.labels = torch.randint(0, n_classes, (n_samples,))  # random labels for classification, vector of size n_samples that contains the right appartenence class for each sample
 
   def __len__(self):
     return len(self.values)  # number of samples in the dataset

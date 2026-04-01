@@ -16,6 +16,7 @@ if __name__ == '__main__':
     full_dataset = MyDataset(n_samples=n_samples, n_features=n_features, n_classes=n_classes) # create an instance of the dataset
     dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
   
+    # The Dataloader id a torch utility that divides the dataset in batches 
     train_loader = DataLoader(dataset_train, batch_size=32, shuffle=True)
     test_loader = DataLoader(dataset_test, batch_size=32)
     
