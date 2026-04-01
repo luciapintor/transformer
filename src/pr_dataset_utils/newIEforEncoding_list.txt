@@ -1,0 +1,144 @@
+Gruppo ie0:
+- ie0_is_none -> binaria
+- ie0_length -> continua
+- ie0_num_tokens -> discreta
+
+Gruppo ie1:
+- ie1_legacy_rate_1mbps_supported -> binaria
+- ie1_legacy_rate_1mbps_basic -> binaria
+- ie1_legacy_rate_2mbps_supported -> binaria
+- ie1_legacy_rate_2mbps_basic -> binaria
+- ie1_legacy_rate_5_5mbps_supported -> binaria
+- ie1_legacy_rate_5_5mbps_basic -> binaria
+- ie1_legacy_rate_6mbps_supported -> binaria
+- ie1_legacy_rate_6mbps_basic -> binaria
+- ie1_legacy_rate_9mbps_supported -> binaria
+- ie1_legacy_rate_9mbps_basic -> binaria
+- ie1_legacy_rate_11mbps_supported -> binaria
+- ie1_legacy_rate_11mbps_basic -> binaria
+- ie1_legacy_rate_12mbps_supported -> binaria
+- ie1_legacy_rate_12mbps_basic -> binaria
+- ie1_legacy_rate_18mbps_supported -> binaria
+- ie1_legacy_rate_18mbps_basic -> binaria
+- ie1_num_supported_legacy_rates -> discreta
+- ie1_num_basic_legacy_rates -> discreta
+- ie1_max_supported_legacy_rate_mbps -> continua
+
+Gruppo ie50:
+- ie50_legacy_rate_24mbps_supported -> binaria
+- ie50_legacy_rate_24mbps_basic -> binaria
+- ie50_legacy_rate_36mbps_supported -> binaria
+- ie50_legacy_rate_36mbps_basic -> binaria
+- ie50_legacy_rate_48mbps_supported -> binaria
+- ie50_legacy_rate_48mbps_basic -> binaria
+- ie50_legacy_rate_54mbps_supported -> binaria
+- ie50_legacy_rate_54mbps_basic -> binaria
+- ie50_num_supported_legacy_rates -> discreta
+- ie50_num_basic_legacy_rates -> discreta
+- ie50_max_supported_legacy_rate_mbps -> continua
+
+Gruppo ie45_ampduparam:
+- ie45_ampduparam_max_ampdu_length_exponent -> discreta
+- ie45_ampduparam_min_mpdu_start_spacing -> discreta
+- ie45_ampduparam_max_ampdu_length_bytes -> continua
+
+Gruppo ie45_capabilities:
+- ie45_capabilities_ldpc_coding -> binaria
+- ie45_capabilities_supported_channel_width -> binaria
+- ie45_capabilities_sm_power_save -> categorica
+- ie45_capabilities_greenfield -> binaria
+- ie45_capabilities_short_gi_20mhz -> binaria
+- ie45_capabilities_short_gi_40mhz -> binaria
+- ie45_capabilities_tx_stbc -> binaria
+- ie45_capabilities_rx_stbc -> categorica
+- ie45_capabilities_delayed_block_ack -> binaria
+- ie45_capabilities_max_amsdu_length -> binaria
+- ie45_capabilities_dsss_cck_in_40mhz -> binaria
+- ie45_capabilities_psmp_support -> binaria
+- ie45_capabilities_forty_mhz_intolerant -> binaria
+- ie45_capabilities_lsig_txop_protection -> binaria
+
+Gruppo ie45_asel:
+- ie45_asel_asel_supported -> binaria
+- ie45_asel_explicit_csi_feedback -> binaria
+- ie45_asel_antenna_indices_feedback -> binaria
+- ie45_asel_explicit_csi_feedback_based_tx_asel -> binaria
+- ie45_asel_antenna_indices_feedback_based_tx_asel -> binaria
+- ie45_asel_rx_asel -> binaria
+- ie45_asel_tx_sounding_ppdu -> binaria
+
+Gruppo ie45_txbf:
+- ie45_txbf_implicit_transmit_beamforming -> binaria
+- ie45_txbf_receive_ndp -> binaria
+- ie45_txbf_transmit_ndp -> binaria
+- ie45_txbf_implicit_transmit_beamforming_capable -> binaria
+- ie45_txbf_receive_staggered_sounding -> binaria
+- ie45_txbf_transmit_staggered_sounding -> binaria
+- ie45_txbf_receive_ndp_capable -> binaria
+- ie45_txbf_transmit_ndp_capable -> binaria
+- ie45_txbf_explicit_csi_feedback -> categorica
+- ie45_txbf_explicit_noncompressed_steering -> binaria
+- ie45_txbf_explicit_compressed_steering -> binaria
+- ie45_txbf_minimal_grouping -> categorica
+- ie45_txbf_csi_beamformer_antennas -> categorica
+- ie45_txbf_noncompressed_steering_antennas -> categorica
+- ie45_txbf_compressed_steering_antennas -> categorica
+- ie45_txbf_csi_max_rows -> categorica
+- ie45_txbf_channel_estimation_capability -> categorica
+
+Gruppo ie45_mcsset_*:
+- ie45_mcsset_txunequalmod_supported -> binaria
+- ie45_mcsset_txrxmcsnotequal -> binaria
+- ie45_mcsset_txmaxss -> discreta
+- ie45_mcsset_txsetdefined -> binaria
+- ie45_mcsset_highestdatarate_mbps -> continua
+
+Gruppo ie45_rxbitmask_*:
+- ie45_rx_mcs_0_supported -> binaria
+- ...
+- ie45_rx_mcs_76_supported -> binaria
+
+Gruppo ie127_0 + ie127_1:
+- ie127_extcap_byte_0_bit_0 -> binaria
+- ...
+- ie127_extcap_byte_1_bit_7 -> binaria
+  oppure
+- ie127_extcap_<nome_semantico> -> binaria
+
+Gruppo ie191:
+- ie191_vht_max_mpdu_length -> categorica
+- ie191_vht_supported_channel_width_set -> categorica
+- ie191_vht_rx_ldpc -> binaria
+- ie191_vht_short_gi_80mhz -> binaria
+- ie191_vht_short_gi_160mhz -> binaria
+- ie191_vht_tx_stbc -> binaria
+- ie191_vht_rx_stbc -> categorica
+- ie191_vht_su_beamformer -> binaria
+- ie191_vht_su_beamformee -> binaria
+- ie191_vht_mu_beamformer -> binaria
+- ie191_vht_mu_beamformee -> binaria
+- ie191_vht_txop_ps -> binaria
+- ie191_vht_htc_vht_capable -> binaria
+- ie191_vht_max_ampdu_length_exponent -> discreta
+- ie191_vht_link_adaptation_capable -> categorica
+- ie191_vht_rx_antenna_pattern_consistency -> binaria
+- ie191_vht_tx_antenna_pattern_consistency -> binaria
+- ie191_vht_extended_nss_bw_support -> categorica
+- ie191_vht_beamformee_sts_capability -> categorica
+- ie191_vht_num_sounding_dimensions -> categorica
+
+Gruppo ie221_oui_*:
+- ie221_oui_0 -> categorica
+- ie221_oui_1 -> categorica
+- ie221_oui_2 -> categorica
+
+Gruppo ie221_type_*:
+- ie221_type_0 -> categorica
+- ie221_type_1 -> categorica
+- ie221_type_2 -> categorica
+- ie221_oui_type_pair_0 -> categorica
+- ie221_oui_type_pair_1 -> categorica
+- ie221_oui_type_pair_2 -> categorica
+
+Gruppo ie107_*:
+- ie107_access_network_type -> categorica

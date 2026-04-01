@@ -1,0 +1,5 @@
+devices
+{0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 14, 16, 17, 18, 19, 20, 21, 22, 23, 50, 51, 52, 53, 54, 55, 56, 57, 58, 61, 62, 63, 64, 65, 66, 67, 68, 69}
+
+IE
+{'start_time', 'ie45_rxbitmask_8to15', 'ie45_rxbitmask_32', 'delta_time', 'delta_seq', 'ie107_internet', 'ie45_txbf', 'ie45_asel', 'ie45_mcsset_highestdatarate', 'ie127_0', 'ie191', 'ie45_mcsset_txsetdefined', 'ie45_rxbitmask_39to52', 'ie45_mcsset_txunequalmod', 'ie127_1', 'ie45_capabilities', 'ie50', 'ie45_rxbitmask_24to31', 'ie1', 'ie45_rxbitmask_53to76', 'ie221_type_3', 'ie107_access_network_type', 'end_time', 'ie107_asra', 'ie45_rxbitmask_16to23', 'ie45_mcsset_txrxmcsnotequal', 'num_packets', 'ie221_type_1', 'ie107_uesa', 'ie221_oui_1', 'ie221_oui_2', 'ie45_ampduparam', 'ie45_mcsset_txmaxss', 'ie221_type_2', 'start_seq', 'ie107_esr', 'ie221_type_0', 'end_seq', 'label', 'ie221_oui_3', 'ie45_rxbitmask_33to38', 'ie0', 'ie221_oui_0', 'ie45_rxbitmask_0to7'}

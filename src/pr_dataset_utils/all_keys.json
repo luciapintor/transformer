@@ -1,0 +1,55 @@
+[   
+    "label",  
+
+    "start_time",
+    "end_time",
+    "delta_time",
+
+    "start_seq",
+    "end_seq",
+    "delta_seq",
+    "num_packets",
+
+    "ie0",
+    "ie1",
+    
+    "ie45_ampduparam",
+    "ie45_asel",
+    "ie45_capabilities",
+    "ie45_mcsset_highestdatarate",
+    "ie45_mcsset_txmaxss",
+    "ie45_mcsset_txrxmcsnotequal",
+    "ie45_mcsset_txsetdefined",
+    "ie45_mcsset_txunequalmod",
+    "ie45_rxbitmask_0to7",
+    "ie45_rxbitmask_8to15",
+    "ie45_rxbitmask_16to23",
+    "ie45_rxbitmask_24to31",
+    "ie45_rxbitmask_32",
+    "ie45_rxbitmask_33to38",
+    "ie45_rxbitmask_39to52",
+    "ie45_rxbitmask_53to76",
+    "ie45_txbf",
+
+    "ie50",
+
+    "ie107_access_network_type",
+    "ie107_asra",
+    "ie107_esr",
+    "ie107_internet",
+    "ie107_uesa",
+
+    "ie127_0",
+    "ie127_1",
+
+    "ie191",
+
+    "ie221_oui_0",
+    "ie221_oui_1",
+    "ie221_oui_2",
+    "ie221_oui_3",
+    "ie221_type_0",
+    "ie221_type_1",
+    "ie221_type_2",
+    "ie221_type_3"
+]
