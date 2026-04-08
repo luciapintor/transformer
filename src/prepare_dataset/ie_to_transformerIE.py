@@ -805,35 +805,66 @@ def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
 
 def preprocess_dataset(burst_dataset: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
-    Preprocessa un intero dataset di burst aggiungendo feature IE0 trasformate.
+    Preprocessa un intero dataset di burst aggiungendo feature IE trasformate.
     
     Args:
-        burst_dataset: Dictionary con struttura:
-                       {
-                           "burst_id_1": {
-                               "ie0": "56:6f:64:...",
-                               ...,
-                               "label": int
-                           },
-                           "burst_id_2": { ... },
-                           ...
-                       }
-    
+        burst_dataset: Dictionary con struttura {burst_id: record}
+        
     Returns:
-        Dictionary preprocessato con feature IE0 aggiunte a ogni burst
+        Dictionary preprocessato con feature IE aggiunte a ogni burst
+    """
+    burst_ids = list(burst_dataset.keys())
+    burst_records = list(burst_dataset.values())
+    processed_records = preprocess_list(burst_records)
+    return dict(zip(burst_ids, processed_records))
+
+
+def preprocess_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Preprocessa una lista di record burst, applicando le trasformazioni IE a ciascuno.
+    
+    Utile per integrare il preprocessing con dataset Python (classi Dataset, liste, ecc.)
+    dove i record sono già separati da label, mac_addresses, ecc. (come in ProbeDataset).
+    
+    Ogni record viene preprocessato indipendentemente senza dipendenza da indici o ID.
+    Il campo 'label' viene preservato se presente nel record originale.
+    
+    Args:
+        records: Lista di dizionari, ciascuno rappresentante un record burst grezzo.
+                 Ogni record può contenere IE grezze e opzionalmente un campo 'label'.
+        
+    Returns:
+        Lista di dizionari preprocessati con feature IE trasformate (140 feature totali).
+        
+    Raises:
+        TypeError: Se records non è una lista, oppure se un elemento non è un dizionario.
         
     Example:
-        >>> dataset = {
-        ...     "burst_1": {"ie0": "56:6f:64:...", "label": 1},
-        ...     "burst_2": {"ie0": None, "label": 2}
-        ... }
-        >>> preprocessed = preprocess_dataset(dataset)
-        >>> # Ogni record ora contiene ie0_is_missing, ie0_is_empty, ie0_length, ie0_num_tokens
+        >>> raw_records = [
+        ...     {"ie0": "56:6f:64:61:66:6f:6e:65", "ie1": "[130, 132, 139]", "label": 0},
+        ...     {"ie0": None, "ie1": "[140, 148]", "label": 1},
+        ...     {"ie0": "", "ie50": "[48, 72]"}
+        ... ]
+        >>> preprocessed = preprocess_list(raw_records)
+        >>> len(preprocessed)
+        3
+        >>> "ie0_is_missing" in preprocessed[0]
+        True
+        >>> preprocessed[0]["label"]
+        0
     """
-    return {
-        burst_id: preprocess_burst(record)
-        for burst_id, record in burst_dataset.items()
-    }
+    if not isinstance(records, list):
+        raise TypeError(f"Expected list, got {type(records).__name__}")
+    
+    preprocessed = []
+    for i, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise TypeError(
+                f"Expected dict at index {i}, got {type(record).__name__}"
+            )
+        preprocessed.append(preprocess_burst(record))
+    
+    return preprocessed
 
 
 # ============================================================================
@@ -848,10 +879,7 @@ def preprocess_json_file(
     """
     Preprocessing di un singolo file JSON.
     
-    Legge il JSON originale, preprocessa ogni record (aggiunge feature IE)
-    e salva un nuovo file JSON con i record preprocessati.
-    
-    Il file originale non viene mai modificato.
+    Legge il JSON originale, preprocessa ogni record e salva un nuovo file JSON.
     
     Args:
         input_json_path: Percorso al file JSON sorgente
@@ -868,727 +896,48 @@ def preprocess_json_file(
         raise FileNotFoundError(f"Input file not found: {input_json_path}")
     
     if verbose:
-        print(f"\n{'='*80}")
-        print(f"Preprocessing JSON: {input_json_path}")
-        print(f"Output destination: {output_json_path}")
-        print(f"{'='*80}")
+        print(f"Preprocessing JSON: {input_json_path} -> {output_json_path}")
     
     # Leggi il file JSON originale
-    if verbose:
-        print("Reading original JSON...")
-    try:
-        with open(input_path, 'r', encoding='utf-8') as f:
-            original_data = json.load(f)
-    except json.JSONDecodeError as e:
-        raise json.JSONDecodeError(f"Invalid JSON in {input_json_path}: {e.msg}", e.doc, e.pos)
+    with open(input_path, 'r', encoding='utf-8') as f:
+        original_data = json.load(f)
     
     if not isinstance(original_data, dict):
         raise ValueError(f"Expected JSON object (dict), got {type(original_data).__name__}")
     
     num_records = len(original_data)
     if verbose:
-        print(f"  Loaded {num_records} records")
+        print(f"Loaded {num_records} records")
     
-    # Preprocessa ogni record
-    if verbose:
-        print("Preprocessing records...")
+    # Preprocessa ogni record usando preprocess_list
+    burst_ids = list(original_data.keys())
+    burst_records = list(original_data.values())
     
-    processed_data = {}
-    num_errors = 0
+    processed_records = preprocess_list(burst_records)
     
-    for burst_id, burst_record in original_data.items():
-        try:
-            new_record = preprocess_burst(burst_record)
-            processed_data[burst_id] = new_record
-        except Exception as e:
-            if verbose:
-                print(f"  [WARN] Record '{burst_id}': {str(e)}")
-            num_errors += 1
-            # Genera record di fallback coerente con lo schema
-            fallback_record = preprocess_burst({})
-            # Preserva label se disponibile
-            if 'label' in burst_record:
-                fallback_record['label'] = burst_record['label']
-            processed_data[burst_id] = fallback_record
-    
-    if verbose:
-        success_count = num_records - num_errors
-        print(f"  Processed {success_count}/{num_records} records successfully")
-        if num_errors > 0:
-            print(f"  Warnings: {num_errors} record(s) had issues")
+    # Ricostituisci dictionary con burst_id come chiave
+    processed_data = dict(zip(burst_ids, processed_records))
     
     # Crea cartella di output se non esiste
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Salva il nuovo file JSON
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(processed_data, f, indent=4)
+    
     if verbose:
-        print(f"Saving preprocessed JSON to {output_json_path}...")
-    try:
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(processed_data, f, indent=4)
-        if verbose:
-            output_size_mb = output_path.stat().st_size / (1024 * 1024)
-            print(f"  ✓ Saved successfully ({output_size_mb:.2f} MB)")
-    except Exception as e:
-        raise IOError(f"Failed to write output file: {str(e)}")
+        output_size_mb = output_path.stat().st_size / (1024 * 1024)
+        print(f"Saved {output_size_mb:.2f} MB to {output_json_path}")
     
     stats = {
         "input_file": str(input_json_path),
         "output_file": str(output_json_path),
         "num_records_processed": num_records,
-        "num_errors": num_errors,
-        "output_file_exists": output_path.exists(),
-        "input_file_exists": input_path.exists()
+        "output_file_exists": output_path.exists()
     }
-    
-    if verbose:
-        print(f"{'='*80}\n")
     
     return stats
 
 
-def preprocess_json_bulk(
-    input_dir: str,
-    output_dir: str,
-    pattern: str = "*.json",
-    verbose: bool = True
-) -> Dict[str, Any]:
-    """
-    Preprocessing bulk di tutti i file JSON in una cartella.
-    
-    Legge tutti i file JSON che matchano il pattern, preprocessa ogni record,
-    e salva nuovi file JSON nella cartella di output.
-    
-    Args:
-        input_dir: Cartella sorgente con file JSON
-        output_dir: Cartella destinazione per file preprocessati
-        pattern: Glob pattern per filtrare file (default: "*.json")
-        verbose: Se True, stampa log dettagliato
-    
-    Returns:
-        Dict con statistiche complessive
-    """
-    input_path = Path(input_dir)
-    output_path = Path(output_dir)
-    
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input directory not found: {input_dir}")
-    
-    if verbose:
-        print(f"\n{'#'*80}")
-        print(f"Bulk JSON Preprocessing")
-        print(f"Input directory:  {input_dir}")
-        print(f"Output directory: {output_dir}")
-        print(f"Pattern: {pattern}")
-        print(f"{'#'*80}\n")
-    
-    # Trova tutti i file JSON
-    json_files = sorted(input_path.glob(pattern))
-    
-    if not json_files:
-        print(f"No files matching pattern '{pattern}' found in {input_dir}")
-        return {
-            "num_files_processed": 0,
-            "num_files_failed": 0,
-            "total_records": 0,
-            "total_errors": 0,
-            "files": []
-        }
-    
-    if verbose:
-        print(f"Found {len(json_files)} file(s) to process\n")
-    
-    file_results = []
-    num_files_failed = 0
-    total_records = 0
-    total_errors = 0
-    
-    for i, input_file in enumerate(json_files, 1):
-        filename = input_file.name
-        output_file = output_path / ("ENC_" + filename)
-        
-        if verbose:
-            print(f"[{i}/{len(json_files)}] Processing: {filename}")
-        
-        try:
-            stats = preprocess_json_file(
-                str(input_file),
-                str(output_file),
-                verbose=False
-            )
-            file_results.append({
-                "input": str(input_file),
-                "output": str(output_file),
-                "records": stats["num_records_processed"],
-                "errors": stats["num_errors"],
-                "status": "ok"
-            })
-            total_records += stats["num_records_processed"]
-            total_errors += stats["num_errors"]
-            
-            if verbose:
-                print(f"  ✓ {stats['num_records_processed']} records")
-        
-        except Exception as e:
-            file_results.append({
-                "input": str(input_file),
-                "output": str(output_file),
-                "records": 0,
-                "errors": 1,
-                "status": "error",
-                "error_message": str(e)
-            })
-            num_files_failed += 1
-            if verbose:
-                print(f"  ✗ ERROR: {str(e)}")
-    
-    result = {
-        "num_files_processed": len(json_files) - num_files_failed,
-        "num_files_failed": num_files_failed,
-        "total_records": total_records,
-        "total_errors": total_errors,
-        "files": file_results
-    }
-    
-    if verbose:
-        print(f"\n{'#'*80}")
-        print(f"Summary:")
-        print(f"  Files processed: {result['num_files_processed']}/{len(json_files)}")
-        print(f"  Total records: {total_records}")
-        print(f"  Total errors: {total_errors}")
-        print(f"{'#'*80}\n")
-    
-    return result
 
-
-# ============================================================================
-# Esempio di utilizzo: preprocessing completo
-# ============================================================================
-
-if __name__ == "__main__":
-    # Esempio record burst realistico
-    sample_record = {
-        "burst_id": "bc:75:74:c8:b8:dc",
-        "start_time": 1746601350.415047,
-        "end_time": 1746603091.233054,
-        "delta_time": 1740.81800699234,
-        "start_seq": 1083,
-        "end_seq": 2690,
-        "delta_seq": 1607,
-        "num_packets": 1178,
-        "ie0": "56:6f:64:61:66:6f:6e:65:57:69:46:69",  # "VodafoneWiFi"
-        "ie1": "[130, 132, 139, 12, 18, 150, 24, 36]",
-        "ie50": "[48, 72, 96, 108]",
-        "ie45_ampduparam": 23,
-        "ie45_asel": 0,
-        "ie45_capabilities": 365,
-        "ie45_txbf": 168166400,
-        "ie45_mcsset_txunequalmod": 0,
-        "ie45_mcsset_txrxmcsnotequal": 0,
-        "ie45_mcsset_txmaxss": 0,
-        "ie45_mcsset_txsetdefined": 1,
-        "ie45_mcsset_highestdatarate": 0,
-        "ie45_rxbitmask_0to7": 255,
-        "ie45_rxbitmask_8to15": 0,
-        "ie45_rxbitmask_16to23": 0,
-        "ie45_rxbitmask_24to31": 0,
-        "ie45_rxbitmask_32": 1,
-        "ie45_rxbitmask_33to38": 0,
-        "ie45_rxbitmask_39to52": 0,
-        "ie45_rxbitmask_53to76": 0,
-        "ie107_access_network_type": 2,
-        "ie127_0": "[0, 0, 0, 128, 0, 0, 0, 64]",
-        "ie127_1": "[4, 0, 10, 2, 0, 64, 0, 0]",
-        "ie191": 865104274,
-        "ie221_oui_0": "57596",
-        "ie221_type_0": "128",
-        "label": 67
-    }
-    
-    print("=" * 80)
-    print("ESEMPIO: Preprocessing Features IE su singolo Burst")
-    print("=" * 80)
-    
-    result = {}
-    
-    # IE0 (SSID)
-    result.update(transform_ie0(sample_record.get("ie0")))
-    print(f"IE0 features: {len([k for k in result.keys() if k.startswith('ie0')])} feature")
-    
-    # IE1 + IE50 (Legacy Rates)
-    ie1_50_features = transform_ie1_ie50_supported_rates(
-        sample_record.get("ie1"),
-        sample_record.get("ie50")
-    )
-    result.update(ie1_50_features)
-    print(f"IE1+IE50 features: {len(ie1_50_features)} feature")
-    
-    # IE45 A-MPDU
-    ie45_ampdu_features = transform_ie45_ampduparam(sample_record.get("ie45_ampduparam"))
-    result.update(ie45_ampdu_features)
-    print(f"IE45 AMPDU: {len(ie45_ampdu_features)} feature")
-    
-    # IE45 Capabilities
-    ie45_cap_features = transform_ie45_capabilities(sample_record.get("ie45_capabilities"))
-    result.update(ie45_cap_features)
-    print(f"IE45 Capabilities: {len(ie45_cap_features)} feature")
-    
-    # IE45 ASEL
-    ie45_asel_features = transform_ie45_asel(sample_record.get("ie45_asel"))
-    result.update(ie45_asel_features)
-    print(f"IE45 ASEL: {len(ie45_asel_features)} feature")
-    
-    # IE45 TXBF
-    ie45_txbf_features = transform_ie45_txbf(sample_record.get("ie45_txbf"))
-    result.update(ie45_txbf_features)
-    print(f"IE45 TXBF: {len(ie45_txbf_features)} feature")
-    
-    # IE45 MCS Set Summary
-    ie45_mcs_features = transform_ie45_mcsset_summary(
-        sample_record.get("ie45_mcsset_txunequalmod"),
-        sample_record.get("ie45_mcsset_txrxmcsnotequal"),
-        sample_record.get("ie45_mcsset_txmaxss"),
-        sample_record.get("ie45_mcsset_txsetdefined"),
-        sample_record.get("ie45_mcsset_highestdatarate")
-    )
-    result.update(ie45_mcs_features)
-    print(f"IE45 MCS Summary: {len(ie45_mcs_features)} feature")
-    
-    # IE45 RX MCS Bitmask
-    ie45_rxbm_features = transform_ie45_rx_mcs_bitmask(
-        sample_record.get("ie45_rxbitmask_0to7"),
-        sample_record.get("ie45_rxbitmask_8to15"),
-        sample_record.get("ie45_rxbitmask_16to23"),
-        sample_record.get("ie45_rxbitmask_24to31"),
-        sample_record.get("ie45_rxbitmask_32"),
-        sample_record.get("ie45_rxbitmask_33to38"),
-        sample_record.get("ie45_rxbitmask_39to52"),
-        sample_record.get("ie45_rxbitmask_53to76")
-    )
-    result.update(ie45_rxbm_features)
-    print(f"IE45 RX MCS Bitmask: {len(ie45_rxbm_features)} feature")
-    
-    # IE107 Interworking
-    ie107_features = transform_ie107_interworking(sample_record.get("ie107_access_network_type"))
-    result.update(ie107_features)
-    print(f"IE107 Interworking: {len(ie107_features)} feature")
-    
-    # IE127 Extended Capabilities
-    ie127_0_str = sample_record.get("ie127_0")
-    ie127_1_str = sample_record.get("ie127_1")
-    ie127_features = transform_ie127_extended_capabilities(ie127_0_str, ie127_1_str)
-    result.update(ie127_features)
-    print(f"IE127 Extended Caps: {len(ie127_features)} feature")
-    
-    # IE191 VHT Capabilities
-    ie191_features = transform_ie191_vht_capabilities(sample_record.get("ie191"))
-    result.update(ie191_features)
-    print(f"IE191 VHT Capabilities: {len(ie191_features)} feature")
-    
-    # IE221 Vendor Specific
-    ie221_features = transform_ie221_vendor_specific(
-        sample_record.get("ie221_oui_0"),
-        sample_record.get("ie221_type_0")
-    )
-    result.update(ie221_features)
-    print(f"IE221 Vendor Specific: {len(ie221_features)} feature")
-    
-    print("=" * 80)
-    print(f"TOTALE FEATURE ESTRATTE: {len(result)} feature")
-    print("=" * 80)
-    
-    # Mostra un campione di feature
-    print("\nCampione di feature estratte:")
-    for i, (k, v) in enumerate(list(result.items())[:15]):
-        print(f"  {k}: {v}")
-    print(f"  ... e {len(result) - 15} altre feature")
-    
-    
-    # ========================================================================
-    # SEZIONE 2: Bulk Preprocessing (file JSON → file JSON)
-    # ========================================================================
-    print("\n\n")
-    print("*" * 80)
-    print("BULK JSON PREPROCESSING EXAMPLES")
-    print("*" *80)
-    
-    # Esempio 1: Singolo file JSON
-    print("\n\n[EXAMPLE 1] Preprocessing single JSON file\n")
-    
-    example_input = "Dataset/all_A_burst_features.json"
-    example_output = "Dataset_Encoded/all_A_burst_features_encoded.json"
-    
-    print(f"Input file:  {example_input}")
-    print(f"Output file: {example_output}")
-    
-    if Path(example_input).exists():
-        print("(File exists, ready to process)\n")
-        try:
-            stats = preprocess_json_file(example_input, example_output, verbose=True)
-            print(f"\nResults:")
-            print(f"  Input: {stats['input_file']}")
-            print(f"  Output: {stats['output_file']}")
-            print(f"  Records processed: {stats['num_records_processed']}")
-            print(f"  Errors: {stats['num_errors']}")
-        except Exception as e:
-            print(f"[ERROR] {str(e)}\n")
-    else:
-        print(f"(File not found - skipping this example)\n")
-        print("To use this, ensure 'Dataset/all_A_burst_features.json' exists.\n")
-    
-    
-    # Esempio 2: Bulk processing di una cartella
-    print("\n\n[EXAMPLE 2] Bulk preprocessing entire directory\n")
-    
-    example_input_dir = "Dataset"
-    example_output_dir = "Dataset_Encoded"
-    
-    print(f"Input directory:  {example_input_dir}")
-    print(f"Output directory: {example_output_dir}")
-    
-    if Path(example_input_dir).exists():
-        print("(Directory exists, ready to process)\n")
-        try:
-            # Nota: Questo processerà TUTTI i file .json nella cartella Dataset
-            bulk_stats = preprocess_json_bulk(
-                example_input_dir,
-                example_output_dir,
-                pattern="*.json",
-                verbose=True
-            )
-            print(f"\nBulk Results:")
-            print(f"  Files processed: {bulk_stats['num_files_processed']}")
-            print(f"  Files failed: {bulk_stats['num_files_failed']}")
-            print(f"  Total records: {bulk_stats['total_records']}")
-            print(f"  Total errors: {bulk_stats['total_errors']}")
-        except Exception as e:
-            print(f"[ERROR] {str(e)}\n")
-    else:
-        print(f"(Directory not found - skipping this example)\n")
-        print("To use this, ensure 'Dataset/' directory exists with JSON files.\n")
-    
-    
-    # ========================================================================
-    # USAGE GUIDE
-    # ========================================================================
-    print("\n")
-    print("=" * 80)
-    print("QUICK START GUIDE - JSON PREPROCESSING")
-    print("=" * 80)
-    print("""
-1. PREPROCESS A SINGLE FILE:
-   
-   from ie_to_transformerIE import preprocess_json_file
-   
-   preprocess_json_file(
-       input_json_path="Dataset/all_A_burst_features.json",
-       output_json_path="Dataset_Encoded/all_A_burst_features_encoded.json"
-   )
-
-
-2. PREPROCESS AN ENTIRE DIRECTORY:
-   
-   from ie_to_transformerIE import preprocess_json_bulk
-   
-   preprocess_json_bulk(
-       input_dir="Dataset",
-       output_dir="Dataset_Encoded",
-       pattern="*.json"
-   )
-
-
-3. PREPROCESS A SINGLE RECORD IN CODE:
-   
-   from ie_to_transformerIE import preprocess_burst
-   
-   original = {"ie0": "56:6f:...", "ie45_capabilities": 365, ...}
-   encoded = preprocess_burst(original)
-
-
-KEY POINTS:
-  ✓ Original files are NEVER modified
-  ✓ New files created with '_encoded' suffix or in '_Encoded' folder
-  ✓ All IE (IE0, IE1+50, IE45 groups, IE107, IE127, IE191, IE221) are processed
-  ✓ Total 140 features extracted per record (only encoded features)
-  ✓ Output is clean JSON with uniform schema (encoded-only)
-  ✓ Handles missing/malformed IE values gracefully with encoded fallback
-    """)
-    print("=" * 80)
-
-
-# ============================================================================
-# DOCUMENTAZIONE ESTESA
-# ============================================================================
-"""
-╔════════════════════════════════════════════════════════════════════════════╗
-║                 ORGANIZZAZIONE DEL FILE E ARCHITETTURA                     ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-VERSIONE 2.1 - AGGIORNAMENTI RECENTI:
-- Corretta documentazione IE45: 57 feature (non 71)
-- Sostituito eval() con ast.literal_eval() per parsing sicuro
-- Corretto IE127: num_enabled_bits conta solo primo byte
-- Fallback errori: record encoded uniforme invece di raw
-- Schema output sempre coerente (solo feature, 140 campi)
-
-SEZIONE 1: IMPORT E HELPER FUNCTIONS (linee ~50-180)
-────────────────────────────────────────────────────
-  - is_ie_missing(): Rileva se un IE è mancante/non valorizzato
-  - decode_hex_string(): Decodifica stringhe hex separati da ':'
-  - safe_int_conversion(): Conversione robusta int
-  - extract_bit(), extract_bits_range(): Operazioni su bitmask
-  - count_set_bits(): Conta bit '1' impostati
-  - parse_rate_as_mbps(): Converte byte rate 802.11 → Mbps
-  - parse_rates_from_list(): Elabora liste di rate
-  - extract_byte_bits(): Decompone byte in array 8-bit
-
-
-SEZIONE 2: IE TRANSFORM FUNCTIONS (linee ~182-620)
-─────────────────────────────────────────────────── 
-ORDINE SEQUENZIALE (come appaiono nei JSON):
-
-  1. transform_ie0()                      [riga ~287] — SSID (4 ft)
-  2. transform_ie1_ie50_supported_rates() [riga ~194] — Legacy rates (31 ft)
-  3. transform_ie45_ampduparam()          [riga ~349] — HT AMPDU (3 ft)
-  4. transform_ie45_capabilities()        [riga ~362] — HT Capabilities (14 ft)
-  5. transform_ie45_asel()                [riga ~384] — HT ASEL (8 ft)
-  6. transform_ie45_txbf()                [riga ~399] — HT TXBF (12 ft)
-  7. transform_ie45_mcsset_summary()      [riga ~418] — HT MCS Summary (8 ft)
-  8. transform_ie45_rx_mcs_bitmask()      [riga ~437] — HT RX Bitmask (12 ft)
-  9. transform_ie107_interworking()       [riga ~486] — Interworking (6 ft)
-  10. transform_ie127_extended_caps()     [riga ~507] — Extended Caps (19 ft)
-  11. transform_ie191_vht_capabilities()  [riga ~524] — VHT Capabilities (13 ft)
-  12. transform_ie221_vendor_specific()   [riga ~565] — Vendor Specific (9 ft)
-
-TOTALE: 140 FEATURE
-
-
-SEZIONE 3: PREPROCESSING PIPELINE (linee ~625-940)
-───────────────────────────────────────────────────
-  - preprocess_burst(): Applica TUTTI i 12 IE transform (produce dict vuoto + updates)
-  - preprocess_dataset(): Legacy function (deprecata)
-  - preprocess_json_file(): Converte singolo file JSON
-  - preprocess_json_bulk(): Processa intera directory
-
-
-SEZIONE 4: EXAMPLES E MAIN (linee ~942-1215)
-─────────────────────────────────────────────
-  - Esempio singolo record con breakdown feature per IE
-  - Esempio singolo file JSON
-  - Esempio bulk processing
-  - Quick start guide
-
-
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    COME AGGIUNGERE UN NUOVO IE                            ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-STEP 1: Scrivere la funzione transform_ie_XXX()
-────────────────────────────────────────────────
-
-Posizionare DOPO i vecchi transform functions, rispettando l'ordine IE naturale.
-
-Template:
-
-    def transform_ie_XXX(input_value: Any, input_value_2: Any = None) -> Dict[str, Any]:
-        '''
-        Trasforma IEXX (descrizione) in feature derivate.
-        
-        Feature generate:
-        - feature_1: descrizione (tipo: binaria/discreta/continua)
-        - feature_2: descrizione
-        
-        Args:
-            input_value: Descrizione parametro 1
-            input_value_2: Descrizione parametro 2 (optional)
-            
-        Returns:
-            Dictionary con i feature estratti
-        '''
-        # Gestire casi mancanti
-        if is_ie_missing(input_value):
-            return {
-                "ieXXX_feature_1": 0,
-                "ieXXX_feature_2": 0,
-                # ... altri feature con valori default
-            }
-        
-        # Elaborare il valore
-        value = safe_int_conversion(input_value) or 0
-        
-        # Estrarre feature
-        result = {
-            "ieXXX_feature_1": 1 if value > 100 else 0,
-            "ieXXX_feature_2": value & 0xF,
-            # ... altri feature
-        }
-        
-        return result
-
-
-STEP 2: Aggiungere il transform nella funzione preprocess_burst()
-──────────────────────────────────────────────────────────────────
-
-Aprire la funzione preprocess_burst() (riga ~625) e aggiungere:
-
-    # IEXX - Descrizione
-    result.update(transform_ie_XXX(
-        burst_record.get("ieXXX_field_1"),
-        burst_record.get("ieXXX_field_2")  # se necessario
-    ))
-
-
-STEP 3: Testare il nuovo IE
-───────────────────────────
-
-    from ie_to_transformerIE import preprocess_burst, transform_ie_XXX
-    
-    # Test singolo
-    test_record = {
-        "ieXXX_field_1": 123,
-        "ieXXX_field_2": 456
-    }
-    
-    new_features = transform_ie_XXX(test_record["ieXXX_field_1"])
-    print(f"Generated {len(new_features)} features")
-    
-    # Test in preprocessing
-    full_preprocessed = preprocess_burst(test_record)
-    print(f"Total features: {len(full_preprocessed)}")
-
-
-╔════════════════════════════════════════════════════════════════════════════╗
-║                   COME AGGIUNGERE UN NUOVO JSON FILE                       ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-SCENARIO: Hai un nuovo file JSON in Dataset/ e vuoi preprocessing
-
-STEP 1: Posizionare il file
-──────────────────────────
-
-    Dataset/my_new_file.json
-
-
-STEP 2: Opzione A - Processa singolo file
-──────────────────────────────────────────
-
-    from ie_to_transformerIE import preprocess_json_file
-    
-    preprocess_json_file(
-        input_json_path="Dataset/my_new_file.json",
-        output_json_path="Dataset_Encoded/my_new_file.json",
-        verbose=True
-    )
-
-Result: Dataset_Encoded/my_new_file.json con le 140 feature per ogni record
-
-
-STEP 3: Opzione B - Processa intera directory (raccomandato)
-────────────────────────────────────────────────────────────
-
-    from ie_to_transformerIE import preprocess_json_bulk
-    
-    preprocess_json_bulk(
-        input_dir="Dataset",
-        output_dir="Dataset_Encoded",
-        pattern="*.json",
-        verbose=True
-    )
-
-Result: Tutti i JSON in Dataset/ preprocessati in Dataset_Encoded/
-
-
-STEP 4: Verificare il risultato
-───────────────────────────────
-
-    import json
-    
-    # Controlla nuovo file
-    d = json.load(open("Dataset_Encoded/my_new_file.json"))
-    first_record = list(d.values())[0]
-    
-    print(f"Total fields: {len(first_record)}")  # Dovrebbe essere 140
-    print(f"Sample features: {list(first_record.keys())[:10]}")
-
-
-COME CAMBIARE IL NOME DEL FILE OUTPUT
-──────────────────────────────────────
-
-Attualmente: Dataset/all_A.json → Dataset_Encoded/all_A.json
-
-Se vuoi un suffisso custom:
-
-    output_name = "Dataset_Encoded/" + input_file.stem + "_features_extracted.json"
-    
-    # Oppure nel bulk processing, modifica la riga:
-    output_file = output_path / input_file.name
-    # In:
-    output_file = output_path / (input_file.stem + "_extracted.json")
-
-
-╔════════════════════════════════════════════════════════════════════════════╗
-║                         STRUTTURA OUTPUT JSON                              ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-L'output contiene SEMPRE solo feature encoded (140 campi totali per record).
-Nessun campo raw originale (ie0, ie1, start_time, ecc.) viene mai incluso.
-
-STRUTTURA UNIFORME:
-{
-    "burst_001": {
-        "ie0_is_missing": 0,
-        "ie0_length": 8,
-        "ie0_num_tokens": 1,
-        "legacy_rate_1mbps_supported": 0,
-        ...altri 136 feature...
-        "label": "scenario_0"  // se presente nell'input
-    }
-}
-
-In caso di errori durante il preprocessing di un record, viene generato un
-record di fallback coerente con lo schema usando preprocess_burst({}),
-preservando la 'label' se disponibile nell'input originale.
-
-
-╔════════════════════════════════════════════════════════════════════════════╗
-║                    TROUBLESHOOTING E FAQ                                   ║
-╚════════════════════════════════════════════════════════════════════════════╝
-
-Q: Il JSON output è più grande/più piccolo del previsto?
-A: Verificare con:
-   python3 -c "
-   import json
-   d = json.load(open('Dataset_Encoded/file.json'))
-   r = list(d.values())[0]
-   print(f'Features per record: {len(r)}')
-   "
-
-Q: Un record ha errori durante preprocessing?
-A: Lo script usa verbose=True per mostrare warning. I record con errori 
-   vengono sostituiti con un record di fallback encoded coerente con lo schema
-   (usando preprocess_burst({})), preservando la 'label' se disponibile.
-   L'output mantiene sempre lo stesso schema uniforme per tutti i record.
-
-Q: Come faccio a capire quale feature è quale?
-A: Prefissi standardizzati:
-   - ie0_* : SSID features
-   - legacy_* : Legacy rate features
-   - ht_* : HT 802.11n features
-   - extcap_* : Extended capabilities
-   - interwork* : Interworking
-   - vendor_* : Vendor specific
-   - vht_* : VHT 802.11ac
-
-Q: Posso processare solo alcune IE?
-A: Sì, modifica preprocess_burst() commentando gli IE che non vuoi:
-
-   result = {}
-   result.update(transform_ie0(...))  # Mantieni questo
-   # result.update(transform_ie1_ie50(...))  # Commenta per escludere
-
-
-Autore: Tesi Wi-Fi Fingerprinting
-Versione: 2.1 (correzioni coerenza schema e parsing sicuro)
-Data ultima modifica: 1 Aprile 2026
-"""
 
