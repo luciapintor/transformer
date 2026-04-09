@@ -41,44 +41,35 @@ def collate_probe_batch(batch):
 
 if __name__ == '__main__':
     
-    # Define hyperparameters and configurations
-    n_samples = None # number of samples in the dataset
-    n_features = None # number of features in the dataset
-    n_classes = None # number of classes for classification (set to 1 for regression)
+    json_path = "Dataset/dataset_burst_json/scenario_0_burst_features.json"
     
-    # Generate a random dataset # TODO replace with ProbeDataset when it's ready
-    #full_dataset = MyDataset(n_samples=n_samples, n_features=n_features, n_classes=n_classes) # create an instance of the dataset
-    #dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
-
-    full_dataset = ProbeDataset(
-        "Dataset/dataset_burst_json/scenario_0_burst_features.json",
-        preprocess=True
-    )
+    # Load the dataset from a JSON file
+    full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
+    # Separate the dataset into training, validation, and test sets
     dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
 
     # Ricava automaticamente le informazioni reali dal dataset scenario_0
-    n_samples = len(full_dataset)
-    n_features = len(full_dataset.data[0])
-    n_classes = full_dataset.count_distinct_labels()
+    n_samples = len(full_dataset)                     # number of samples in the dataset
+    n_features = len(full_dataset.data[0])            # number of features in the dataset 
+    n_classes = full_dataset.count_distinct_labels()  # number of classes for classification (set to 1 for regression)
 
     print(f"Total samples: {n_samples}")
     print(f"Number of features: {n_features}")
     print(f"Distinct labels: {full_dataset.get_distinct_labels()}")
     print(f"Number of classes: {n_classes}")
 
-  
     # The Dataloader id a torch utility that divides the dataset in batches 
     train_loader = DataLoader(
         dataset_train,
         batch_size=32,
-        shuffle=True,
-        collate_fn=collate_probe_batch
+        shuffle=True, # shuffle the training data at every epoch to improve generalization
+        collate_fn=collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
 
     test_loader = DataLoader(
         dataset_test,
-        batch_size=32,
-        collate_fn=collate_probe_batch
+        batch_size=32, 
+        collate_fn=collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
     
     # TODO: change the model to an unsupervised one, and change the training loop accordingly. 
@@ -86,8 +77,13 @@ if __name__ == '__main__':
     # a simpler architecture, such as an encoder.
     model = TransformerAutoencoder(n_features)
     
-    train(model, train_loader, epochs=100, lr = 0.1)
+    n_epochs = 100
+    learning_rate = 0.1
     
+    # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
+    train(model, train_loader, epochs=n_epochs, lr = learning_rate)
+    
+    # Extract embeddings from the test set using the trained model
     embeddings = extract_embeddings(model, test_loader)
     
     # TODO: Since KMeans is a supervised clustering algorithm, it requires the number of clusters (n_clusters) 
@@ -95,6 +91,5 @@ if __name__ == '__main__':
     cluster_labels = kmeans_embeddings(embeddings, n_clusters=n_classes)
     
     print(cluster_labels[:20])
-    
     
     pass
