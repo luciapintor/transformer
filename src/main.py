@@ -1,11 +1,12 @@
 from torch.utils.data import DataLoader
 import torch
 
-from transformer_utils.transformer_autoencoder import TransformerAutoencoder, train, extract_embeddings
+from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from prepare_dataset.probe_dataset import ProbeDataset
 from clustering.kmeans_embeddings import kmeans_embeddings
 
 def collate_probe_batch(batch):
+    """TODO: spostare in prepare_dataset.probe_dataset.py"""
     """
     Converte un batch di campioni del ProbeDataset in tensori PyTorch.
 
@@ -75,19 +76,19 @@ if __name__ == '__main__':
     # TODO: change the model to an unsupervised one, and change the training loop accordingly. 
     # Transformer is useful if you use sequences, but for tabular data, you might want to consider using 
     # a simpler architecture, such as an encoder.
-    model = TransformerAutoencoder(n_features)
+    model = MatrixAutoencoder(n_features)
     
     n_epochs = 100
     learning_rate = 0.1
     
     # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
-    train(model, train_loader, epochs=n_epochs, lr = learning_rate)
+    model.fit(dataloader=train_loader, epochs=n_epochs, lr = learning_rate)
     
     # Extract embeddings from the test set using the trained model
-    embeddings = extract_embeddings(model, test_loader)
+    embeddings = model.encode_dataloader(dataloader=test_loader)
     
     # TODO: Since KMeans is a supervised clustering algorithm, it requires the number of clusters (n_clusters) 
-    # to be specified in advance.
+    # to be specified in advance. We can substitute it with DBSCAN
     cluster_labels = kmeans_embeddings(embeddings, n_clusters=n_classes)
     
     print(cluster_labels[:20])
