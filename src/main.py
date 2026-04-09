@@ -73,10 +73,13 @@ if __name__ == '__main__':
         collate_fn=collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
     
-    # TODO: change the model to an unsupervised one, and change the training loop accordingly. 
-    # Transformer is useful if you use sequences, but for tabular data, you might want to consider using 
-    # a simpler architecture, such as an encoder.
-    model = MatrixAutoencoder(n_features)
+    emb_size = 64        # dimension of the latent space (embedding size)
+    hidden_dim = 128    # dimension of the hidden layer in the autoencoder 
+    
+    # Initialize the autoencoder model with the number of features in the dataset
+    # The autoencoder will learn to compress the input data into a lower-dimensional latent space 
+    # and then reconstruct it back to the original space.
+    model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
     
     n_epochs = 100
     learning_rate = 0.1

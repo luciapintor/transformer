@@ -5,15 +5,15 @@ class MatrixAutoencoder(nn.Module):
     """
     A simple autoencoder for tabular data. The model consists of an encoder and a decoder, 
     both implemented as feedforward neural networks.
-    The encoder maps the input features to a lower-dimensional latent space (d_model), 
+    The encoder maps the input features to a lower-dimensional latent space (emb_size), 
     while the decoder reconstructs the original features from the latent representation.
     """
-    def __init__(self, n_features, d_model=64, hidden_dim=128):
+    def __init__(self, n_features, emb_size=64, hidden_dim=128):
         super().__init__()
         
         # Store the input parameters as instance variables for later use
         self.n_features = n_features
-        self.d_model = d_model
+        self.emb_size = emb_size
         self.hidden_dim = hidden_dim
         
         # Encoder: maps input features to latent space
@@ -21,14 +21,14 @@ class MatrixAutoencoder(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(n_features, hidden_dim), # first layer maps input features to hidden dimension
             nn.ReLU(),                         # activation function to introduce non-linearity
-            nn.Linear(hidden_dim, d_model)     # second layer maps hidden dimension to latent space (d_model)
+            nn.Linear(hidden_dim, emb_size)     # second layer maps hidden dimension to latent space (emb_size)
         )
         
         # Decoder: reconstructs input from latent space
         # This decoder is also a sequential container that maps the latent representation back 
         # to the original feature space.
         self.decoder = nn.Sequential(
-            nn.Linear(d_model, hidden_dim),     # first layer maps latent space back to hidden dimension
+            nn.Linear(emb_size, hidden_dim),     # first layer maps latent space back to hidden dimension
             nn.ReLU(),                          # activation function to introduce non-linearity
             nn.Linear(hidden_dim, n_features)   # second layer maps hidden dimension back to original space
         )
@@ -41,7 +41,7 @@ class MatrixAutoencoder(nn.Module):
         This method is called when we pass an input through the model (e.g., model(x) or self(x)).
         """
         
-        z = self.encoder(x)        # (batch, d_model)
+        z = self.encoder(x)        # (batch, emb_size)
         x_hat = self.decoder(z)    # (batch, n_features)
         
         return x_hat, z
