@@ -135,6 +135,46 @@ class ProbeDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx], self.mac_addresses[idx]
     
+    @staticmethod
+    def collate_probe_batch(batch):
+        """TODO: spostare in prepare_dataset.probe_dataset.py"""
+        """
+        Converte un batch di campioni del ProbeDataset in tensori PyTorch.
+
+        Supporta due formati: sarebbero i formati di un sample del ProbeDataset:
+        - (record_dict, label)
+        - (record_dict, label, mac_address)
+
+        Returns:
+            X: tensore float32 di shape [batch_size, n_features]
+            y: tensore long di shape [batch_size]
+        """
+        first_item = batch[0]
+
+        if len(first_item) == 2:
+            records, labels = zip(*batch)
+        elif len(first_item) == 3:
+            records, labels, mac_addresses = zip(*batch)  # ignoriamo i MAC address
+        else:
+            raise ValueError(
+                f"Formato batch non supportato: attesi 2 o 3 elementi per sample, trovati {len(first_item)}"
+            )
+
+        feature_names = sorted(records[0].keys())
+
+        X = torch.tensor(
+            [[record[name] for name in feature_names] for record in records],
+            dtype=torch.float32
+        )
+
+        y = torch.tensor(labels, dtype=torch.long)
+
+        # mac_addresses = ["AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66"] --> Z = [170, 187, 204, 221, 238, 255],    [ 17,  34,  51,  68,  85, 102]
+        Z = [[int(x, 16) for x in mac.split(":")] for mac in mac_addresses] 
+        
+        #with open("chissacosacontieneX.txt", "w", encoding="utf-8") as f:
+        #    f.write(str((X.data[0])))
+        return X, y, Z
 
     
 

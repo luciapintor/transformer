@@ -5,46 +5,12 @@ from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from prepare_dataset.probe_dataset import ProbeDataset
 from clustering.kmeans_embeddings import kmeans_embeddings
 
-def collate_probe_batch(batch):
-    """TODO: spostare in prepare_dataset.probe_dataset.py"""
-    """
-    Converte un batch di campioni del ProbeDataset in tensori PyTorch.
-
-    Supporta due formati:
-    - (record_dict, label)
-    - (record_dict, label, mac_address)
-
-    Returns:
-        X: tensore float32 di shape [batch_size, n_features]
-        y: tensore long di shape [batch_size]
-    """
-    first_item = batch[0]
-
-    if len(first_item) == 2:
-        records, labels = zip(*batch)
-    elif len(first_item) == 3:
-        records, labels, _ = zip(*batch)  # ignoriamo i MAC address
-    else:
-        raise ValueError(
-            f"Formato batch non supportato: attesi 2 o 3 elementi per sample, trovati {len(first_item)}"
-        )
-
-    feature_names = sorted(records[0].keys())
-
-    X = torch.tensor(
-        [[record[name] for name in feature_names] for record in records],
-        dtype=torch.float32
-    )
-
-    y = torch.tensor(labels, dtype=torch.long)
-
-    return X, y
 
 if __name__ == '__main__':
     
     json_path = "Dataset/dataset_burst_json/scenario_0_burst_features.json"
     
-    # Load the dataset from a JSON file
+    # Load the dataset from a JSON file and preprocess it
     full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
     # Separate the dataset into training, validation, and test sets
     dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
@@ -64,13 +30,13 @@ if __name__ == '__main__':
         dataset_train,
         batch_size=32,
         shuffle=True, # shuffle the training data at every epoch to improve generalization
-        collate_fn=collate_probe_batch # this function converts a batch of samples from the dataset into tensors
+        collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
 
     test_loader = DataLoader(
         dataset_test,
         batch_size=32, 
-        collate_fn=collate_probe_batch # this function converts a batch of samples from the dataset into tensors
+        collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
     
     emb_size = 64        # dimension of the latent space (embedding size)
@@ -82,7 +48,8 @@ if __name__ == '__main__':
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
     
     n_epochs = 100
-    learning_rate = 0.1
+    #TODO??? implementare il gradient descent nel fit? anche se mi pare ci sia
+    learning_rate = 0.5
     
     # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
     model.fit(dataloader=train_loader, epochs=n_epochs, lr = learning_rate)
@@ -94,6 +61,6 @@ if __name__ == '__main__':
     # to be specified in advance. We can substitute it with DBSCAN
     cluster_labels = kmeans_embeddings(embeddings, n_clusters=n_classes)
     
-    print(cluster_labels[:20])
+    print(cluster_labels)
     
     pass
