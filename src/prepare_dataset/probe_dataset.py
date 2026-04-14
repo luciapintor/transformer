@@ -83,7 +83,7 @@ class ProbeDataset(Dataset):
         for record in self.data:
             record.pop("label", None) #rimuove la label se presente
 
-    def separate_train_val_test(self, train_ratio=0.7, val_ratio=0.15, seed: int = 42):
+    def separate_train_val_test(self, train_ratio=0.7, val_ratio=0.0, seed: int = 42):
         """
         Suddivide il dataset in train, validation e test.
 

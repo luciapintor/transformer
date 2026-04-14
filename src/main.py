@@ -1,14 +1,17 @@
 from torch.utils.data import DataLoader
 import torch
+import pandas as pd
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from prepare_dataset.probe_dataset import ProbeDataset
-from clustering.kmeans_embeddings import kmeans_embeddings
+from sklearn.cluster import DBSCAN
+
 
 
 if __name__ == '__main__':
     
     json_path = "Dataset/dataset_burst_json/scenario_0_burst_features.json"
+    batch_size = 50
     
     # Load the dataset from a JSON file and preprocess it
     full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
@@ -28,14 +31,14 @@ if __name__ == '__main__':
     # The Dataloader id a torch utility that divides the dataset in batches 
     train_loader = DataLoader(
         dataset_train,
-        batch_size=32,
+        batch_size=batch_size,
         shuffle=True, # shuffle the training data at every epoch to improve generalization
         collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
 
     test_loader = DataLoader(
         dataset_test,
-        batch_size=32, 
+        batch_size=batch_size, 
         collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
     )
     
@@ -49,7 +52,7 @@ if __name__ == '__main__':
     
     n_epochs = 100
     #TODO??? implementare il gradient descent nel fit? anche se mi pare ci sia
-    learning_rate = 0.5
+    learning_rate = 1e-3
     
     # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
     model.fit(dataloader=train_loader, epochs=n_epochs, lr = learning_rate)
@@ -57,10 +60,23 @@ if __name__ == '__main__':
     # Extract embeddings from the test set using the trained model
     embeddings = model.encode_dataloader(dataloader=test_loader)
     
-    # TODO: Since KMeans is a supervised clustering algorithm, it requires the number of clusters (n_clusters) 
-    # to be specified in advance. We can substitute it with DBSCAN
-    cluster_labels = kmeans_embeddings(embeddings, n_clusters=n_classes)
+    #Clustering with DBSCAN
+    if isinstance(embeddings, torch.Tensor):
+        embeddings = embeddings.detach().cpu().numpy()
+
+    dbscan = DBSCAN(eps=0.1, min_samples=1)
+    cluster_labels = dbscan.fit_predict(embeddings)
+
+    output_values = []
+    for  i, [features, label, mac_address] in enumerate(dataset_test):
+        output_values += [(features, label, mac_address, cluster_labels[i]),]
     
-    print(cluster_labels)
+    output_values = sorted(output_values, key = lambda x: x[1])
+
+    for sample_idx, [_, label, mac_add, cluster] in enumerate(output_values):
+        print(f"sample_test_{sample_idx} -> true_label={label}, cluster={cluster}")
+
     
-    pass
+    
+        
+    
