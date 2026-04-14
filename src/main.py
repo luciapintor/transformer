@@ -1,5 +1,7 @@
 from torch.utils.data import DataLoader
 import torch
+
+#TODO use pandas for output_value
 import pandas as pd
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
@@ -51,7 +53,7 @@ if __name__ == '__main__':
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
     
     n_epochs = 100
-    #TODO??? implementare il gradient descent nel fit? anche se mi pare ci sia
+    #TODO try different lr 
     learning_rate = 1e-3
     
     # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
@@ -64,6 +66,7 @@ if __name__ == '__main__':
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
+    #TODO try different eps and min_samples
     dbscan = DBSCAN(eps=0.1, min_samples=1)
     cluster_labels = dbscan.fit_predict(embeddings)
 
