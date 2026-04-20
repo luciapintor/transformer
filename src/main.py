@@ -1,85 +1,130 @@
 from torch.utils.data import DataLoader
 import torch
-
-#TODO use pandas for output_value
 import pandas as pd
+
+from sklearn.cluster import DBSCAN
+from sklearn.metrics import (
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+    homogeneity_score,
+    completeness_score,
+    v_measure_score,
+)
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from prepare_dataset.probe_dataset import ProbeDataset
-from sklearn.cluster import DBSCAN
-
 
 
 if __name__ == '__main__':
-    
-    json_path = "Dataset/dataset_burst_json/scenario_0_burst_features.json"
-    batch_size = 50
-    
-    # Load the dataset from a JSON file and preprocess it
-    full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
-    # Separate the dataset into training, validation, and test sets
-    dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
 
-    # Ricava automaticamente le informazioni reali dal dataset scenario_0
-    n_samples = len(full_dataset)                     # number of samples in the dataset
-    n_features = len(full_dataset.data[0])            # number of features in the dataset 
-    n_classes = full_dataset.count_distinct_labels()  # number of classes for classification (set to 1 for regression)
+    #definiamo i dataset di train e test, con i rispettivi path ai file json
+    train_json_path = "Dataset/dataset_burst_json_veri/scenario_0_burst_features.json"
+    test_json_path  = "Dataset/dataset_burst_json_veri/scenario_1_burst_features.json"
 
-    print(f"Total samples: {n_samples}")
-    print(f"Number of features: {n_features}")
-    print(f"Distinct labels: {full_dataset.get_distinct_labels()}")
-    print(f"Number of classes: {n_classes}")
+    #TODO: definire un batch size adeguato, considerando la dimensione del dataset 
+    batch_size = 64
 
-    # The Dataloader id a torch utility that divides the dataset in batches 
+    #creo i 2 dataset
+    dataset_train = ProbeDataset(
+        path_json=train_json_path,
+        preprocess=True,
+        include_mac_features=False
+    )
+
+    dataset_test = ProbeDataset(
+        path_json=test_json_path,
+        preprocess=True,
+        include_mac_features=False
+    )
+
+    #anche se è un numero fissato, è meglio definirlo dinamicamente 
+    n_features = len(dataset_train.data[0])
+
     train_loader = DataLoader(
         dataset_train,
         batch_size=batch_size,
-        shuffle=True, # shuffle the training data at every epoch to improve generalization
-        collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
+        shuffle=True,
+        collate_fn=ProbeDataset.collate_probe_batch
     )
 
     test_loader = DataLoader(
         dataset_test,
-        batch_size=batch_size, 
-        collate_fn=ProbeDataset.collate_probe_batch # this function converts a batch of samples from the dataset into tensors
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=ProbeDataset.collate_probe_batch
     )
-    
-    emb_size = 64        # dimension of the latent space (embedding size)
-    hidden_dim = 128    # dimension of the hidden layer in the autoencoder 
-    
-    # Initialize the autoencoder model with the number of features in the dataset
-    # The autoencoder will learn to compress the input data into a lower-dimensional latent space 
-    # and then reconstruct it back to the original space.
-    model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
-    
-    n_epochs = 100
-    #TODO try different lr 
-    learning_rate = 1e-3
-    
-    # training the model in an unsupervised way, since we want to extract embeddings without using the labels.
-    model.fit(dataloader=train_loader, epochs=n_epochs, lr = learning_rate)
-    
-    # Extract embeddings from the test set using the trained model
+
+    model = MatrixAutoencoder(n_features, emb_size=64, hidden_dim=128)
+
+    # train SOLO su scenario 0
+    model.fit(dataloader=train_loader, epochs=100, lr=1e-3)
+
+    # encoding SOLO di scenario 1
     embeddings = model.encode_dataloader(dataloader=test_loader)
-    
-    #Clustering with DBSCAN
+
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
-    #TODO try different eps and min_samples
     dbscan = DBSCAN(eps=0.1, min_samples=1)
     cluster_labels = dbscan.fit_predict(embeddings)
 
+    # True label del test set
+    # Servono solo per valutare i cluster trovati           
+    true_labels = dataset_test.labels           
+                
+    # ----------------------------          
+    # Metriche di valutazione           
+    # ----------------------------          
+                
+    # ARI: concordanza tra cluster trovati e gruppi veri            
+    ari = adjusted_rand_score(true_labels, cluster_labels)          
+                
+    # NMI: informazione condivisa tra labels vere e cluster         
+    nmi = normalized_mutual_info_score(true_labels, cluster_labels)         
+                
+    # Homogeneity: ogni cluster contiene quasi una sola label?          
+    homogeneity = homogeneity_score(true_labels, cluster_labels)            
+                
+    # Completeness: ogni label vera finisce quasi tutta in un cluster?          
+    completeness = completeness_score(true_labels, cluster_labels)          
+                
+    # V-measure: sintesi di homogeneity e completeness          
+    v_measure = v_measure_score(true_labels, cluster_labels)               
+                
+    print(f"ARI: {ari:.4f}")            
+    print(f"NMI: {nmi:.4f}")            
+    print(f"Homogeneity: {homogeneity:.4f}")            
+    print(f"Completeness: {completeness:.4f}")          
+    print(f"V-measure: {v_measure:.4f}")            
+    print(f"Numero cluster: {n_clusters}")          
+    print(f"Punti rumore: {n_noise}")           
+                
+    output_values = []          
+    for i, (features, label, mac_address) in enumerate(dataset_test):           
+        output_values.append({          
+            "sample_index": i,          
+            "mac_address": mac_address,         
+            "true_label": label,            
+            "cluster": cluster_labels[i],           
+        })          
+                
+    df = pd.DataFrame(output_values)            
+    df = df.sort_values("true_label")           
+    print(df)           
+                
+    df.to_csv("transformer/clustering_output/output_s0_train_s1_test.csv", index=False)         
+
     output_values = []
-    for  i, [features, label, mac_address] in enumerate(dataset_test):
-        output_values += [(features, label, mac_address, cluster_labels[i]),]
-    
-    output_values = sorted(output_values, key = lambda x: x[1])
+    for i, (features, label, mac_address) in enumerate(dataset_test):
+        output_values.append({
+            "sample_index": i,
+            "mac_address": mac_address,
+            "true_label": label,
+            "cluster": cluster_labels[i],
+        })
 
-    for sample_idx, [_, label, mac_add, cluster] in enumerate(output_values):
-        print(f"sample_test_{sample_idx} -> true_label={label}, cluster={cluster}")
+    df = pd.DataFrame(output_values)
+    df = df.sort_values("true_label")
+    print(df)
 
-    
-    
-        
-    
+    df.to_csv("transformer/clustering_output/output_s0_train_s1_test.csv", index=False)

@@ -76,7 +76,6 @@ class MatrixAutoencoder(nn.Module):
             for batch in dataloader:
                 # The dataloader provides batches of data, which can be in different formats 
                 # (e.g., list, tuple, or tensor).
-                #TODO append the mac_addresses
                 
                 x = batch[0]    #takes only the data 
                 x = x.to(device).float()

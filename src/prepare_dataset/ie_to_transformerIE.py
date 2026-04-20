@@ -179,6 +179,27 @@ def extract_byte_bits(byte_value: Any) -> list[int]:
     """
     if byte_value is None or is_ie_missing(byte_value):
         return [0] * 8
+
+
+def transform_mac_address(mac: Any) -> Dict[str, int]:
+    """
+    Trasforma un MAC address in 6 feature numeriche: mac_0 ... mac_5.
+    Se il MAC è mancante o invalido, ritorna sei zeri.
+    """
+    zero_result = {f"mac_{i}": 0 for i in range(6)}
+
+    if is_ie_missing(mac) or not isinstance(mac, str):
+        return zero_result
+
+    try:
+        parts = [int(x, 16) for x in mac.split(":")]
+    except ValueError:
+        return zero_result
+
+    if len(parts) != 6:
+        return zero_result
+
+    return {f"mac_{i}": parts[i] for i in range(6)}
     
     try:
         byte_int = int(byte_value) if isinstance(byte_value, str) else byte_value
@@ -712,39 +733,43 @@ def transform_ie221_vendor_specific(oui_list: Any, type_list: Any = None) -> Dic
 def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Preprocessa un singolo record di burst estraendo SOLO le feature IE trasformate.
-    
+
     Applica tutte le trasformazioni IE disponibili e restituisce SOLO i nuovi feature
-    (non include i campi originali del record).
-    
+    (non include i campi originali del record), con in più il MAC trasformato in
+    6 feature numeriche e la label preservata.
+
     Args:
         burst_record: Record originale del burst con tutte le IE
-        
+
     Returns:
-        Dict con SOLO le feature IE trasformate (140 feature totali)
+        Dict con SOLO le feature trasformate
     """
     result = {}
-    
+
+    # MAC address come 6 feature numeriche
+    result.update(transform_mac_address(burst_record.get("mac")))
+
     # IE0 (SSID)
     result.update(transform_ie0(burst_record.get("ie0")))
-    
+
     # IE1 + IE50 (Legacy Rates)
     result.update(transform_ie1_ie50_supported_rates(
         burst_record.get("ie1"),
         burst_record.get("ie50")
     ))
-    
+
     # IE45 A-MPDU Parameters
     result.update(transform_ie45_ampduparam(burst_record.get("ie45_ampduparam")))
-    
+
     # IE45 Capabilities
     result.update(transform_ie45_capabilities(burst_record.get("ie45_capabilities")))
-    
+
     # IE45 ASEL
     result.update(transform_ie45_asel(burst_record.get("ie45_asel")))
-    
+
     # IE45 TXBF
     result.update(transform_ie45_txbf(burst_record.get("ie45_txbf")))
-    
+
     # IE45 MCS Set Summary
     result.update(transform_ie45_mcsset_summary(
         burst_record.get("ie45_mcsset_txunequalmod"),
@@ -753,7 +778,7 @@ def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
         burst_record.get("ie45_mcsset_txsetdefined"),
         burst_record.get("ie45_mcsset_highestdatarate")
     ))
-    
+
     # IE45 RX MCS Bitmask
     result.update(transform_ie45_rx_mcs_bitmask(
         burst_record.get("ie45_rxbitmask_0to7"),
@@ -765,7 +790,7 @@ def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
         burst_record.get("ie45_rxbitmask_39to52"),
         burst_record.get("ie45_rxbitmask_53to76")
     ))
-    
+
     # IE107 Interworking
     result.update(transform_ie107_interworking(
         burst_record.get("ie107_access_network_type"),
@@ -774,16 +799,16 @@ def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
         burst_record.get("ie107_esr"),
         burst_record.get("ie107_uesa")
     ))
-    
+
     # IE127 Extended Capabilities
     result.update(transform_ie127_extended_capabilities(
         burst_record.get("ie127_0"),
         burst_record.get("ie127_1")
     ))
-    
+
     # IE191 VHT Capabilities
     result.update(transform_ie191_vht_capabilities(burst_record.get("ie191")))
-    
+
     # IE221 Vendor Specific
     oui_list = []
     type_list = []
@@ -796,26 +821,74 @@ def preprocess_burst(burst_record: Dict[str, Any]) -> Dict[str, Any]:
             oui_list.append(oui_val)
             type_list.append(type_val)
     result.update(transform_ie221_vendor_specific(oui_list, type_list))
-    
+
     # Preserve the original label
     result["label"] = burst_record.get("label")
-    
+
     return result
 
 
-def preprocess_dataset(burst_dataset: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _normalize_dataset_root(
+    burst_dataset: Any,
+) -> tuple[list[dict[str, Any]], list[str] | None]:
     """
-    Preprocessa un intero dataset di burst aggiungendo feature IE trasformate.
-    
-    Args:
-        burst_dataset: Dictionary con struttura {burst_id: record}
-        
+    Normalizza il dataset in una lista di record.
+
+    Supporta due formati:
+    1) dict: {burst_id: record}
+    2) list: [record, record, ...]
+
     Returns:
-        Dictionary preprocessato con feature IE aggiunte a ogni burst
+        records: lista dei record
+        burst_ids:
+            - lista di chiavi originali se l'input era dict
+            - None se l'input era list
     """
-    burst_ids = list(burst_dataset.keys())
-    burst_records = list(burst_dataset.values())
-    processed_records = preprocess_list(burst_records)
+    if isinstance(burst_dataset, dict):
+        burst_ids = []
+        records = []
+
+        for key, value in burst_dataset.items():
+            if not isinstance(value, dict):
+                raise TypeError(
+                    f"Expected dict record for key {key!r}, got {type(value).__name__}"
+                )
+            burst_ids.append(key)
+            records.append(value)
+
+        return records, burst_ids
+
+    if isinstance(burst_dataset, list):
+        for i, record in enumerate(burst_dataset):
+            if not isinstance(record, dict):
+                raise TypeError(
+                    f"Expected dict at index {i}, got {type(record).__name__}"
+                )
+        return burst_dataset, None
+
+    raise TypeError(
+        f"burst_dataset must be dict or list, got {type(burst_dataset).__name__}"
+    )
+
+
+def preprocess_dataset(burst_dataset: Any) -> Any:
+    """
+    Preprocessa un intero dataset mantenendo il comportamento esistente.
+
+    Supporta sia:
+    - dict: {burst_id: record}
+    - list: [record, record, ...]
+
+    Mantiene la stessa struttura in output:
+    - input dict -> output dict
+    - input list -> output list
+    """
+    records, burst_ids = _normalize_dataset_root(burst_dataset)
+    processed_records = preprocess_list(records)
+
+    if burst_ids is None:
+        return processed_records
+
     return dict(zip(burst_ids, processed_records))
 
 
@@ -878,66 +951,65 @@ def preprocess_json_file(
 ) -> Dict[str, Any]:
     """
     Preprocessing di un singolo file JSON.
-    
-    Legge il JSON originale, preprocessa ogni record e salva un nuovo file JSON.
-    
-    Args:
-        input_json_path: Percorso al file JSON sorgente
-        output_json_path: Percorso dove salvare il file JSON preprocessato
-        verbose: Se True, stampa log di progresso
-    
-    Returns:
-        Dict con statistiche preprocessing
+
+    Supporta file JSON con root:
+    1) dict: {burst_id: record}
+    2) list: [record, record, ...]
     """
     input_path = Path(input_json_path)
     output_path = Path(output_json_path)
-    
+
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_json_path}")
-    
+
     if verbose:
         print(f"Preprocessing JSON: {input_json_path} -> {output_json_path}")
-    
-    # Leggi il file JSON originale
+
     with open(input_path, 'r', encoding='utf-8') as f:
         original_data = json.load(f)
-    
-    if not isinstance(original_data, dict):
-        raise ValueError(f"Expected JSON object (dict), got {type(original_data).__name__}")
-    
+
+    if not isinstance(original_data, (dict, list)):
+        raise ValueError(
+            f"Expected JSON root to be dict or list, got {type(original_data).__name__}"
+        )
+
     num_records = len(original_data)
     if verbose:
         print(f"Loaded {num_records} records")
-    
-    # Preprocessa ogni record usando preprocess_list
-    burst_ids = list(original_data.keys())
-    burst_records = list(original_data.values())
-    
-    processed_records = preprocess_list(burst_records)
-    
-    # Ricostituisci dictionary con burst_id come chiave
-    processed_data = dict(zip(burst_ids, processed_records))
-    
-    # Crea cartella di output se non esiste
+        print(f"Root type: {type(original_data).__name__}")
+
+    processed_data = preprocess_dataset(original_data)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Salva il nuovo file JSON
+
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(processed_data, f, indent=4)
-    
+
     if verbose:
         output_size_mb = output_path.stat().st_size / (1024 * 1024)
         print(f"Saved {output_size_mb:.2f} MB to {output_json_path}")
-    
+
     stats = {
         "input_file": str(input_json_path),
         "output_file": str(output_json_path),
+        "input_root_type": type(original_data).__name__,
         "num_records_processed": num_records,
         "output_file_exists": output_path.exists()
     }
-    
+
     return stats
 
 
+if __name__ == "__main__":
+    repo_root = Path(__file__).resolve().parents[3]
+    input_json_path = repo_root / "Dataset" / "dataset_burst_json_veri" / "scenario_0_burst_features.json"
+    output_json_path = repo_root / "Dataset" / "dataset_burst_json_veri_preprocessati" / "scenario_0_burst_features_preprocessed.json"
 
+    stats = preprocess_json_file(
+        input_json_path=str(input_json_path),
+        output_json_path=str(output_json_path),
+        verbose=True
+    )
 
+    print("Preprocessing completato.")
+    print(json.dumps(stats, indent=4))
