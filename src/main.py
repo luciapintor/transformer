@@ -12,6 +12,7 @@ from sklearn.metrics import (
 )
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
+from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 from prepare_dataset.probe_dataset import ProbeDataset
 
 
@@ -57,7 +58,7 @@ if __name__ == '__main__':
     model = MatrixAutoencoder(n_features, emb_size=64, hidden_dim=128)
 
     # train SOLO su scenario 0
-    model.fit(dataloader=train_loader, epochs=100, lr=1e-3)
+    model.fit(dataloader=train_loader, epochs=150, lr=1e-3)
 
     # encoding SOLO di scenario 1
     embeddings = model.encode_dataloader(dataloader=test_loader)
@@ -65,40 +66,36 @@ if __name__ == '__main__':
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
-    dbscan = DBSCAN(eps=0.1, min_samples=1)
+    dbscan = DBSCAN(eps=0.1, min_samples=4)
     cluster_labels = dbscan.fit_predict(embeddings)
 
     # True label del test set
     # Servono solo per valutare i cluster trovati           
     true_labels = dataset_test.labels           
-                
-    # ----------------------------          
-    # Metriche di valutazione           
-    # ----------------------------          
-                
-    # ARI: concordanza tra cluster trovati e gruppi veri            
-    ari = adjusted_rand_score(true_labels, cluster_labels)          
-                
-    # NMI: informazione condivisa tra labels vere e cluster         
-    nmi = normalized_mutual_info_score(true_labels, cluster_labels)         
-                
-    # Homogeneity: ogni cluster contiene quasi una sola label?          
-    homogeneity = homogeneity_score(true_labels, cluster_labels)            
-                
-    # Completeness: ogni label vera finisce quasi tutta in un cluster?          
-    completeness = completeness_score(true_labels, cluster_labels)          
-                
-    # V-measure: sintesi di homogeneity e completeness          
-    v_measure = v_measure_score(true_labels, cluster_labels)               
-                
-    print(f"ARI: {ari:.4f}")            
-    print(f"NMI: {nmi:.4f}")            
-    print(f"Homogeneity: {homogeneity:.4f}")            
-    print(f"Completeness: {completeness:.4f}")          
-    print(f"V-measure: {v_measure:.4f}")            
-    print(f"Numero cluster: {n_clusters}")          
-    print(f"Punti rumore: {n_noise}")           
-                
+
+    # scarto i campioni considerati rumore da DBSCAN per valutare le metriche del clustering        
+
+    true_labels_filtered = []
+    cluster_labels_filtered = []
+
+    for t, c in zip(true_labels, cluster_labels):
+        if c != -1:
+            true_labels_filtered.append(t)
+            cluster_labels_filtered.append(c)
+
+    metrics_undiscarded = calc_evaluation_metrics(true_labels_filtered, cluster_labels_filtered)
+    print("CALCOLO SENZA RUMORE")
+    print(f"ARI: {metrics_undiscarded['ari']:.4f}")            
+    print(f"NMI: {metrics_undiscarded['nmi']:.4f}")            
+    print(f"Homogeneity: {metrics_undiscarded['homogeneity']:.4f}")            
+    print(f"Completeness: {metrics_undiscarded['completeness']:.4f}")          
+    print(f"V-measure: {metrics_undiscarded['v_measure']:.4f}")    
+
+    print(f"--------------------------------------------------------------")
+    print("Numero di classi:", len(set(dataset_test.labels)))
+    print(f"Numero di cluster trovati senza rumore: {len(set(cluster_labels_filtered))}")  
+    print(f"Cluster labels: {set(cluster_labels)}")     
+
     output_values = []          
     for i, (features, label, mac_address) in enumerate(dataset_test):           
         output_values.append({          
