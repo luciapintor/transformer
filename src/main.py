@@ -3,37 +3,33 @@ import torch
 import pandas as pd
 
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import (
-    adjusted_rand_score,
-    normalized_mutual_info_score,
-    homogeneity_score,
-    completeness_score,
-    v_measure_score,
-)
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 from prepare_dataset.probe_dataset import ProbeDataset
 
-
 if __name__ == '__main__':
 
     #definiamo i dataset di train e test, con i rispettivi path ai file json
-    train_json_path = "Dataset/dataset_burst_json_veri/scenario_0_burst_features.json"
-    test_json_path  = "Dataset/dataset_burst_json_veri/scenario_1_burst_features.json"
+    # Invece, usa il nuovo metodo per specificare liste di scenari
+    train_scenarios = [0,1,2,3,4,5,6,7]  # Lista di scenari per il training
+    test_scenarios = [8,9,10]   # Lista di scenari per il test
+    base_path = "Dataset/dataset_burst_json_veri/"
 
     #TODO: definire un batch size adeguato, considerando la dimensione del dataset 
-    batch_size = 64
+    batch_size = 128
 
-    #creo i 2 dataset
-    dataset_train = ProbeDataset(
-        path_json=train_json_path,
+    #creo i 2 dataset usando il nuovo metodo
+    dataset_train = ProbeDataset.from_scenario_list(
+        scenario_list=train_scenarios,
+        base_path=base_path,
         preprocess=True,
         include_mac_features=False
     )
 
-    dataset_test = ProbeDataset(
-        path_json=test_json_path,
+    dataset_test = ProbeDataset.from_scenario_list(
+        scenario_list=test_scenarios,
+        base_path=base_path,
         preprocess=True,
         include_mac_features=False
     )
@@ -58,7 +54,7 @@ if __name__ == '__main__':
     model = MatrixAutoencoder(n_features, emb_size=64, hidden_dim=128)
 
     # train SOLO su scenario 0
-    model.fit(dataloader=train_loader, epochs=150, lr=1e-3)
+    model.fit(dataloader=train_loader, epochs=100, lr=1e-3)
 
     # encoding SOLO di scenario 1
     embeddings = model.encode_dataloader(dataloader=test_loader)
@@ -94,7 +90,7 @@ if __name__ == '__main__':
     print(f"--------------------------------------------------------------")
     print("Numero di classi:", len(set(dataset_test.labels)))
     print(f"Numero di cluster trovati senza rumore: {len(set(cluster_labels_filtered))}")  
-    print(f"Cluster labels: {set(cluster_labels)}")     
+    print(f"Cluster labels: {set(cluster_labels_filtered)}")     
 
     output_values = []          
     for i, (features, label, mac_address) in enumerate(dataset_test):           

@@ -219,6 +219,54 @@ class ProbeDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx], self.mac_addresses[idx]
 
+    @classmethod
+    def from_scenario_list(cls, scenario_list, base_path="Dataset/dataset_burst_json/", preprocess=False, include_mac_features=False):
+        """
+        Crea un ProbeDataset combinando i dati da una lista di scenari.
+
+        Args:
+            scenario_list: lista di numeri interi rappresentante gli scenari (es. [2,8,6]).
+            base_path: percorso base dove si trovano i file scenario_X_burst_features.json.
+            preprocess: se True, preprocessa i dati.
+            include_mac_features: se True, include le feature MAC nei dati.
+
+        Returns:
+            Un'istanza di ProbeDataset con i dati combinati.
+        """
+        if include_mac_features and not preprocess:
+            raise ValueError(
+                "include_mac_features=True richiede preprocess=True, "
+                "altrimenti il MAC resterebbe una stringa dentro data"
+            )
+
+        data = []
+        labels = []
+        mac_addresses = []
+
+        for num in scenario_list:
+            path = Path(base_path) / f"scenario_{num}_burst_features.json"
+            # Crea un'istanza temporanea per chiamare load_json
+            temp_instance = cls.__new__(cls)
+            partial_data, partial_labels, partial_mac_addresses = temp_instance.load_json(
+                path, keep_mac_in_data=include_mac_features
+            )
+            data.extend(partial_data)
+            labels.extend(partial_labels)
+            mac_addresses.extend(partial_mac_addresses)
+
+        # Crea un'istanza senza chiamare __init__
+        instance = cls.__new__(cls)
+        instance.path = None  # Non ha un singolo path
+        instance.include_mac_features = include_mac_features
+        instance.data = data
+        instance.labels = labels
+        instance.mac_addresses = mac_addresses
+
+        if preprocess:
+            instance.preprocess_data()
+
+        return instance
+
     @staticmethod
     def collate_probe_batch(batch):
         """TODO: spostare in prepare_dataset.probe_dataset.py"""

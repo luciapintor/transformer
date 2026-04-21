@@ -1,6 +1,5 @@
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, homogeneity_score, completeness_score, v_measure_score
 
-
 def calc_evaluation_metrics(true_labels, cluster_labels):
     
     metrics = {}
