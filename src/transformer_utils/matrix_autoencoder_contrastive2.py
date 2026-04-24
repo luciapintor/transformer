@@ -47,7 +47,7 @@ class MatrixAutoencoder(nn.Module):
         
         return x_hat, z
     
-    def fit(self, dataloader, epochs=10, lr=1e-3, device=None):
+    def fit(self, dataloader, epochs=10, lr=1e-3, contr_temp=0.1, device=None):
         """
         This method trains the autoencoder in an unsupervised way,
         since we want to extract embeddings without using the labels.
@@ -88,7 +88,7 @@ class MatrixAutoencoder(nn.Module):
                     
                 # compute contrastive loss between embeddings of samples with the same label, 
                 # treating them as modified versions of the same sample
-                loss = contrastive_loss_calc(z, y)
+                loss = contrastive_loss_calc(z, y, temperature=contr_temp)
                 
                 # Backward pass: compute gradients and update model parameters
                 loss.backward()
@@ -133,7 +133,7 @@ class MatrixAutoencoder(nn.Module):
         # since we are only interested in the embeddings and not in updating the model parameters.
         with torch.no_grad():
             for batch in dataloader:
-                x = batch[0] if isinstance(batch, (list, tuple)) else batch
+                x = batch[0] 
                 x = x.to(device).float()
                 
                 z = self.encoder(x)
@@ -141,7 +141,7 @@ class MatrixAutoencoder(nn.Module):
         
         return torch.cat(embeddings, dim=0)
     
-def contrastive_loss_calc(z, y, temperature=0.05):
+def contrastive_loss_calc(z, y, temperature=0.1):
     """
     This function computes a simple contrastive loss considering 
     other samples with the same label as modified versions of the same sample.
@@ -155,32 +155,35 @@ def contrastive_loss_calc(z, y, temperature=0.05):
 
     # Compute the similarity matrix between all pairs of embeddings in the batch,
     # scaled by the temperature parameter to control the sharpness of the distribution.
-    sim = torch.matmul(z, z.T) / temperature  # (B, B)
+    sim = torch.matmul(z, z.T) / temperature  
 
     # Create a mask to identify which samples belong to the same class (label).
     y = y.view(-1, 1)
-    mask = (y == y.T).float()
+    pos_mask = (y == y.T).float().to(z.device)
 
-    # remove self-similarity from the similarity matrix by creating an identity matrix (self_mask) and subtracting it from the mask.
+    # remove self-comparisons from the similarity matrix by creating an identity matrix (self_mask) 
+    # which has 1s on the diagonal (indicating self-comparisons) and 0s elsewhere.
     self_mask = torch.eye(z.size(0), device=z.device)
-    mask = mask - self_mask
-
-    # Compute the contrastive loss using the similarity matrix and the mask.
-    exp_sim = torch.exp(sim) * (1 - self_mask)
     
-    # To compute the log probabilities, we take the similarity matrix and apply the log-softmax function. 
-    # This is done by subtracting the log of the sum of exponentiated similarities for each sample 
-    # from the similarity matrix itself.
-    # This gives us the log probability of the positive samples (those with the same label) for each sample in the batch.
-    log_prob = sim - torch.log(exp_sim.sum(dim=1, keepdim=True) + 1e-8)
-
-    # Finally, we compute the mean log probability of the positive samples for each sample in the batch 
-    # by multiplying the log probabilities with the mask and summing over the positive samples,
-    # and then dividing by the number of positive samples (the sum of the mask) 
-    # to get the average log probability for each sample.
-    mean_log_prob_pos = (mask * log_prob).sum(dim=1) / (mask.sum(dim=1) + 1e-8)
-
-    # The loss is then computed as the negative mean of the log probabilities of the positive samples,
-    # which encourages the model to maximize the similarity between samples with the same label.
-    loss = -mean_log_prob_pos.mean()
-    return loss
+    # the positive mask will have 1s for pairs of samples with the same label (positive pairs) and 
+    # 0s for pairs with different labels (negative pairs)
+    pos_mask = pos_mask - self_mask
+    
+    # the negative mask will have 1s for pairs with different labels (negative pairs) and 
+    # 0s for pairs with the same label (positive pairs)
+    neg_mask = 1.0 - pos_mask - self_mask
+    
+    # positive similarity
+    pos_sum = (sim * pos_mask).sum(dim=1)           # sum of similarities for positive pairs for each sample
+    pos_count = pos_mask.sum(dim=1).clamp(min=1.0)  # count of positive pairs for each sample, clamped to avoid division by zero
+    pos_mean = pos_sum / pos_count                  # mean similarity for positive pairs for each sample
+    
+    # negative similarity
+    neg_sum = (sim * neg_mask).sum(dim=1)           # sum of similarities for negative pairs for each sample
+    neg_count = neg_mask.sum(dim=1).clamp(min=1.0)  # count of negative pairs for each sample, clamped to avoid division by zero
+    neg_mean = neg_sum / neg_count                  # mean similarity for negative pairs for each sample
+    
+    # Loss: increase similarity for positive pairs and decrease it for negative pairs
+    loss = -(pos_mean - neg_mean)
+    
+    return loss.mean()
