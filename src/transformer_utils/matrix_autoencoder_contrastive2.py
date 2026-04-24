@@ -47,7 +47,7 @@ class MatrixAutoencoder(nn.Module):
         
         return x_hat, z
     
-    def fit(self, dataloader, epochs=10, lr=1e-3, contr_temp=0.1, device=None):
+    def fit(self, dataloader, epochs=10, lr=1e-3, device=None):
         """
         This method trains the autoencoder in an unsupervised way,
         since we want to extract embeddings without using the labels.
@@ -63,7 +63,7 @@ class MatrixAutoencoder(nn.Module):
         # The optimizer is responsible for updating the model parameters based on the computed gradients.
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
 
-        # Training loop: iterate over epochs and batches of data
+        # his training loop iterates over epochs and batches of data
         for epoch in range(epochs):
             
             # Set the model to training mode
@@ -72,27 +72,35 @@ class MatrixAutoencoder(nn.Module):
             total_loss = 0.0
             
             for batch in dataloader:
-                # The dataloader provides batches of data, which can be in different formats 
-                # (e.g., list, tuple, or tensor).
                 
                 x = batch[0]    #takes only the data 
                 x = x.to(device).float()
                 
                 y = batch[1]    # takes labels 
                 
-                # Zero the gradients (reset the gradients of all model parameters to zero)
+                # Zero the gradients (reset the gradients before training this epoch)
                 optimizer.zero_grad()
                 
-                # Forward pass: compute the model output and the latent representation
+                """
+                once the gradient is reset in the epoch, the training loop consists of the following steps:
+                1. Forward Pass (feeding the model)
+                2. Loss Calculation (computing the loss based on the model's output and the original input)
+                3. Backward Pass (how much each parameter contributed to the error)
+                4. Weight Update (updating the model parameters based on the computed gradients)
+                """
+                
+                # Forward Pass: compute the model output and the latent representation
                 x_hat, z = self(x)                
                     
-                # compute contrastive loss between embeddings of samples with the same label, 
-                # treating them as modified versions of the same sample
-                loss = contrastive_loss_calc(z, y, temperature=contr_temp)
+                # Loss Calculation: compute the reconstruction loss and the contrastive loss
+                rec_loss = reconstruction_loss_calc(x, x_hat)   # compute the reconstruction loss
+                contr_loss = contrastive_loss_calc(z, y)        # compute the contrastive loss
+                loss = rec_loss + contr_loss                    # total loss is the sum of reconstruction and contrastive losses
                 
-                # Backward pass: compute gradients and update model parameters
-                loss.backward()
-                # Update the model parameters based on the computed gradients
+                # Backward pass: cumulate the gradients for all model parameters based on the computed loss
+                loss.backward() 
+                
+                # Weight Update: update the model parameters based on the computed gradients
                 optimizer.step()
                 
                 total_loss += loss.item()
@@ -141,7 +149,7 @@ class MatrixAutoencoder(nn.Module):
         
         return torch.cat(embeddings, dim=0)
     
-def contrastive_loss_calc(z, y, temperature=0.1):
+def contrastive_loss_calc(z, y):
     """
     This function computes a simple contrastive loss considering 
     other samples with the same label as modified versions of the same sample.
@@ -155,7 +163,7 @@ def contrastive_loss_calc(z, y, temperature=0.1):
 
     # Compute the similarity matrix between all pairs of embeddings in the batch,
     # scaled by the temperature parameter to control the sharpness of the distribution.
-    sim = torch.matmul(z, z.T) / temperature  
+    sim = torch.matmul(z, z.T) 
 
     # Create a mask to identify which samples belong to the same class (label).
     y = y.view(-1, 1)
@@ -187,3 +195,11 @@ def contrastive_loss_calc(z, y, temperature=0.1):
     loss = -(pos_mean - neg_mean)
     
     return loss.mean()
+
+def reconstruction_loss_calc(x, x_hat):
+    """
+    This function computes the mean squared error (MSE) loss between the input x and the reconstruction x_hat.
+    The MSE loss measures the average squared difference between the original input and its reconstruction, 
+    encouraging the model to produce reconstructions that are as close as possible to the original inputs.
+    """
+    return F.mse_loss(x_hat, x)

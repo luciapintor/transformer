@@ -26,8 +26,6 @@ if __name__ == '__main__':
     hidden_dim = 128        #dimensione del layer nascosto dell'autoencoder
     epochs = 10             #numero di sessioni di training del modello
     learning_rate = 1e-3    #tasso di apprendimento per l'ottimizzazione del modello
-    contr_temp = 0.1        #temperatura per la funzione di contrastive loss 
-                            #(basse temperature -> maggiore selezione; alte temperature  -> minore selezione)
 
 # ====================================================================
 #                   PARAMETRI CLUSTERING
@@ -47,6 +45,10 @@ if __name__ == '__main__':
     
     # get the number of features from the dataset (assuming all scenarios have the same features)
     n_features = len(dataset_train.data.keys()) 
+    
+    # print the number of samples in train and test datasets
+    print(f"Numero di campioni nel dataset di train: {len(dataset_train)}")
+    print(f"Numero di campioni nel dataset di test: {len(dataset_test)}")
 
     # creating dataloaders for train and test scenarios
     train_loader = ProbeDataLoader(dataset_train, batch_size=batch_size, shuffle=True)
@@ -54,13 +56,15 @@ if __name__ == '__main__':
 
     # Autoencoder to extract embeddings from the data
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
-    model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate, contr_temp=contr_temp)  # training only on training scenarios
-    embeddings = model.encode_dataloader(dataloader=test_loader)                                # extracting embeddings 
+    model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate)  # training only on training scenarios
+    embeddings = model.encode_dataloader(dataloader=test_loader)         # extracting embeddings 
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
     print("CLUSTERING DBSCAN OF RAW DATA")
-    dbscan_results(eps=eps, min_samples=min_samples, my_data=dataset_test.data, true_labels=dataset_test.labels) 
+    dbscan_results(eps=eps, min_samples=min_samples, my_data=dataset_test.data, true_labels=dataset_test.labels,
+                    macs=dataset_test.mac_addresses, output_path="clustering_output/output_raw_data.csv") 
     
     print("CLUSTERING DBSCAN OF EMBEDDINGS")
-    dbscan_results(eps=eps, min_samples=min_samples, my_data=embeddings, true_labels=dataset_test.labels)
+    dbscan_results(eps=eps, min_samples=min_samples, my_data=embeddings, true_labels=dataset_test.labels,
+                    macs=dataset_test.mac_addresses, output_path="clustering_output/output_embeddings.csv")

@@ -1,8 +1,10 @@
+import pandas as pd
+from numpy import ndarray
 from sklearn.cluster import DBSCAN
 
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 
-def dbscan_results(eps, min_samples, my_data, true_labels):
+def dbscan_results(eps, min_samples, my_data, true_labels, macs, output_path="clustering_output/output.csv"):
     """
     This function performs DBSCAN clustering on the provided data and evaluates the results using various metrics.
     It takes the following parameters:  
@@ -38,3 +40,18 @@ def dbscan_results(eps, min_samples, my_data, true_labels):
     print(f"Numero di cluster trovati senza rumore: {len(set(cluster_labels_filtered))}")  
     print(f"Cluster labels: {set(cluster_labels_filtered)}")     
     print(f"--------------------------------------------------------------")
+  
+    if isinstance(my_data, ndarray):
+        my_data = pd.DataFrame(my_data)
+
+    output_values = {        
+                    "sample_index": my_data.index,          
+                    "mac_address": macs,         
+                    "true_label": true_labels,            
+                    "cluster": cluster_labels,           
+                    }
+                
+    df = pd.DataFrame(output_values)            
+    df = df.sort_values("true_label")           
+                
+    df.to_csv(output_path, index=False)   
