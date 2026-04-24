@@ -220,7 +220,7 @@ class ProbeDataset(Dataset):
         return self.data[idx], self.labels[idx], self.mac_addresses[idx]
 
     @classmethod
-    def from_scenario_list(cls, scenario_list, base_path="Dataset/dataset_burst_json/", preprocess=False, include_mac_features=False):
+    def from_scenario_list(cls, scenario_list, base_path="Dataset/dataset_burst_json/", is_bursts=False, preprocess=False, include_mac_features=False):
         """
         Crea un ProbeDataset combinando i dati da una lista di scenari.
 
@@ -244,7 +244,10 @@ class ProbeDataset(Dataset):
         mac_addresses = []
 
         for num in scenario_list:
-            path = Path(base_path) / f"scenario_{num}_burst_features.json"
+            if is_bursts:
+                path = Path(base_path) / f"scenario_{num}_burst_features.json"
+            else:
+                path = Path(base_path) / f"scenario_{num}_full.json"
             # Crea un'istanza temporanea per chiamare load_json
             temp_instance = cls.__new__(cls)
             partial_data, partial_labels, partial_mac_addresses = temp_instance.load_json(
