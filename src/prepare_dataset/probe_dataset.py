@@ -11,6 +11,7 @@ import torch
 from pathlib import Path
 
 from torch.utils.data import Dataset
+from converting_pcap.extract_features import extract_from_pcap
 
 try:
     from .ie_to_transformerIE import preprocess_list
@@ -22,6 +23,7 @@ class ProbeDataset(Dataset):
     def __init__(
         self,
         path_json,
+        is_bursts=False,
         preprocess: bool = False,
         include_mac_features: bool = False
     ):
@@ -40,6 +42,8 @@ class ProbeDataset(Dataset):
                 "include_mac_features=True richiede preprocess=True, "
                 "altrimenti il MAC resterebbe una stringa dentro data"
             )
+        
+            
 
         self.path = Path(path_json)
         self.include_mac_features = include_mac_features

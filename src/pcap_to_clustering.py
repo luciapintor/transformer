@@ -1,12 +1,24 @@
 from torch.utils.data import DataLoader
 import torch
 import pandas as pd
+import json
 
 from sklearn.cluster import DBSCAN
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 from prepare_dataset.probe_dataset import ProbeDataset
+from converting_pcap.extract_features import extract_from_pcap
+
+def pcap_to_json(pcap_file, output_json):
+    dataset = extract_from_pcap(pcap_file=pcap_file)
+
+    #aggiungo label fittizzia, solo per avere un formato standard
+    for record in dataset:
+        record["label"] = -1
+
+    with open(output_json, "w") as f:
+        json.dump(dataset, f, indent=4)
 
 if __name__ == '__main__':
 
@@ -14,11 +26,10 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    train_scenarios = [0]  # Lista di scenari per il training
-    test_scenarios = [1]            # Lista di scenari per il test
-    base_path = "Dataset/dataset_burst_label0"   # Percorso base dei file JSON
-    batch_size = 256                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
-    is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
+    pcap_file = "/example.pcap"  # Percorso del file pcap da cui estrarre i dati
+    output_json = "Dataset/dataset_json_from_pcap/dataset_from_pcap.json"  # Percorso del file JSON di output
+    isPcap = True                # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
+    batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
 
@@ -28,7 +39,7 @@ if __name__ == '__main__':
 
     emb_size = 64           #dimensione dell'embedding finale prodotto dall'encoder
     hidden_dim = 128        #dimensione del layer nascosto dell'autoencoder
-    epochs = 10             #numero di sessioni di training del modello
+    epochs = 100             #numero di sessioni di training del modello
     learning_rate = 1e-3    #tasso di apprendimento per l'ottimizzazione del modello
 
 # ====================================================================
@@ -37,30 +48,20 @@ if __name__ == '__main__':
     eps = 0.1               #raggio massimo per considerare due campioni come vicini in DBSCAN
     min_samples = 4         #numero minimo di campioni per diventare cluster
 
-    #creo i 2 dataset usando il nuovo metodo
-    dataset_train = ProbeDataset.from_scenario_list(
-        scenario_list=train_scenarios,
-        base_path=base_path,
-        is_bursts=is_bursts,
-        preprocess=preprocess,
-        include_mac_features=include_mac_features
-    )
+    #converto il pcap in json se isPcap è True, altrimenti uso direttamente il json già presente
+    if isPcap:
+        pcap_to_json(pcap_file, output_json)
+    json_path = output_json
+    
+    full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
 
-    dataset_test = ProbeDataset.from_scenario_list(
-        scenario_list=test_scenarios,
-        base_path=base_path,
-        is_bursts=is_bursts,
-        preprocess=preprocess,
-        include_mac_features=include_mac_features
-    )
+    #divido il json in train e test
+    dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
 
     #dimensioni dei vari dataset
-    n_features = len(dataset_train.data[0])
-    n_probe_train = len(dataset_train.data)  #numero di campioni nel dataset di training
-    n_probe_test = len(dataset_test.data)    #numero di campioni nel dataset di test
-
-    # dataset_train.labels = torch.zeros(len(dataset_train.labels), dtype=torch.long)
-    # dataset_test.labels = torch.zeros(len(dataset_test.labels), dtype=torch.long)
+    n_features = len(full_dataset.data[0])
+    n_probe_train = len(dataset_train)
+    n_probe_test = len(dataset_test)
 
     train_loader = DataLoader(
         dataset_train,
@@ -78,9 +79,6 @@ if __name__ == '__main__':
 
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
 
-    # train_loader.dataset.labels = torch.zeros(len(train_loader.dataset.labels), dtype=torch.long)
-    # test_loader.dataset.labels = torch.zeros(len(test_loader.dataset.labels), dtype=torch.long)
-
     # train SOLO sugli scenari di training
     model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate)
 
@@ -91,11 +89,7 @@ if __name__ == '__main__':
         embeddings = embeddings.detach().cpu().numpy()
 
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-    cluster_labels = dbscan.fit_predict(embeddings)
-
-    # True label del test set
-    # Servono solo per valutare i cluster trovati           
-    true_labels = dataset_test.labels           
+    cluster_labels = dbscan.fit_predict(embeddings) 
 
     # scarto i campioni considerati rumore da DBSCAN per valutare le metriche del clustering        
 
@@ -103,24 +97,17 @@ if __name__ == '__main__':
     cluster_labels_filtered = []
     discarded_pr = 0
 
-    for t, c in zip(true_labels, cluster_labels):
+    for c in cluster_labels:
         if c != -1:
-            true_labels_filtered.append(t)
             cluster_labels_filtered.append(c)
         else:
             discarded_pr += 1
 
-    metrics_undiscarded = calc_evaluation_metrics(true_labels_filtered, cluster_labels_filtered)
     print("CALCOLO SENZA RUMORE")
+    print(f"Probe considerate: {n_probe_test}")
     print(f"Probe considerate rumore (cluster -1): {discarded_pr} --> {100*(discarded_pr/n_probe_test):.2f}%")
-    print(f"ARI: {metrics_undiscarded['ari']:.4f}")            
-    print(f"NMI: {metrics_undiscarded['nmi']:.4f}")            
-    print(f"Homogeneity: {metrics_undiscarded['homogeneity']:.4f}")            
-    print(f"Completeness: {metrics_undiscarded['completeness']:.4f}")          
-    print(f"V-measure: {metrics_undiscarded['v_measure']:.4f}")    
 
     print(f"--------------------------------------------------------------")
-    print("Numero di classi:", len(set(dataset_test.labels)))
     print(f"Numero di cluster trovati senza rumore: {len(set(cluster_labels_filtered))}")  
     print(f"Cluster labels: {set(cluster_labels_filtered)}")     
 
@@ -128,28 +115,12 @@ if __name__ == '__main__':
     for i, (features, label, mac_address) in enumerate(dataset_test):           
         output_values.append({          
             "sample_index": i,          
-            "mac_address": mac_address,         
-            "true_label": label,            
+            "mac_address": mac_address,       
             "cluster": cluster_labels[i],           
         })
                 
     df = pd.DataFrame(output_values)            
-    df = df.sort_values("true_label")           
+    df = df.sort_values("cluster")           
     print(df)           
                 
     df.to_csv("transformer/clustering_output/output_s0_train_s1_test.csv", index=False)         
-
-    output_values = []
-    for i, (features, label, mac_address) in enumerate(dataset_test):
-        output_values.append({
-            "sample_index": i,
-            "mac_address": mac_address,
-            "true_label": label,
-            "cluster": cluster_labels[i],
-        })
-
-    df = pd.DataFrame(output_values)
-    df = df.sort_values("true_label")
-    print(df)
-
-    df.to_csv("transformer/clustering_output/output_s0_train_s1_test.csv", index=False)

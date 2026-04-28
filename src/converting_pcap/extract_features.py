@@ -4,7 +4,7 @@ import os
 import pyshark as ps
 from datetime import datetime
 
-from convert_hexadecimal import convert_hexadecimal, convert_hexadecimal_list
+from .convert_hexadecimal import convert_hexadecimal, convert_hexadecimal_list
 
 def extract_from_pcap(pcap_file):
     """
@@ -21,6 +21,7 @@ def extract_from_pcap(pcap_file):
     try:
         packet_list = ps.FileCapture(input_file=pcap_file, use_json=True)
     
+        
         for pkt in packet_list:
             pkt_summary = {}
             pkt_summary['timestamp'] = extract_timestamp(pcap_frame=pkt)
@@ -38,10 +39,11 @@ def extract_from_pcap(pcap_file):
     return packet_list_summary
 
 def extract_timestamp(pcap_frame):
-    timestamp_str = pcap_frame.sniff_timestamp
-    timestamp_str = timestamp_str[:26]
-    timestamp_datetime = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-    return timestamp_datetime.timestamp()
+    timestamp_str = str(pcap_frame.sniff_timestamp)
+
+    timestamp_datetime = datetime.fromtimestamp(float(timestamp_str))
+
+    return timestamp_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 def extract_mac(pcap_frame):
     return pcap_frame.wlan.sa
@@ -244,8 +246,8 @@ def extract_ie191_value(tag_param):
     
     
 if __name__ == "__main__":
-    packet_list_summary = extract_from_pcap(pcap_file="src/converting_pcap/example.pcap")
-    
+    packet_list_summary = extract_from_pcap(pcap_file="/home/giuff/tshark/pcapfiles/example.pcap")
+
     print("Printing the first 5 packets with their features:")
     
     for i, packet in enumerate(packet_list_summary[:5]):
