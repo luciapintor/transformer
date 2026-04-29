@@ -26,9 +26,9 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    probe_file = "/example.pcap"  # Percorso del file pcap da cui estrarre i dati
+    probe_file = "Dataset/dataset_merged_probes_json/data with labels/scenario_0_full.json"  # Percorso del file pcap da cui estrarre i dati
     output_json = "Dataset/dataset_json_from_pcap/dataset_from_pcap.json"  # Percorso del file JSON di output
-    isPcap = True                # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
+    isPcap = False                # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
     emb_size = 64           #dimensione dell'embedding finale prodotto dall'encoder
     hidden_dim = 128        #dimensione del layer nascosto dell'autoencoder
-    epochs = 100             #numero di sessioni di training del modello
+    epochs = 50             #numero di sessioni di training del modello
     learning_rate = 1e-3    #tasso di apprendimento per l'ottimizzazione del modello
 
 # ====================================================================
@@ -51,9 +51,11 @@ if __name__ == '__main__':
     #converto il pcap in json se isPcap è True, altrimenti uso direttamente il json già presente
     if isPcap:
         pcap_to_json(probe_file, output_json)
-    json_path = output_json
-    
-    full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
+        json_path = output_json
+    else:
+        json_path = probe_file
+        
+    full_dataset = ProbeDataset(path_json=json_path, preprocess=preprocess, include_mac_features=include_mac_features)
 
     #divido il json in train e test
     dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
@@ -123,4 +125,4 @@ if __name__ == '__main__':
     df = df.sort_values("cluster")           
     print(df)           
                 
-    df.to_csv("transformer/clustering_output/output_s0_train_s1_test.csv", index=False)         
+    df.to_csv("transformer/clustering_output/outputClustering.csv", index=False)         
