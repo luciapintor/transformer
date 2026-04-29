@@ -26,7 +26,7 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    pcap_file = "/example.pcap"  # Percorso del file pcap da cui estrarre i dati
+    probe_file = "/example.pcap"  # Percorso del file pcap da cui estrarre i dati
     output_json = "Dataset/dataset_json_from_pcap/dataset_from_pcap.json"  # Percorso del file JSON di output
     isPcap = True                # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
@@ -50,7 +50,7 @@ if __name__ == '__main__':
 
     #converto il pcap in json se isPcap è True, altrimenti uso direttamente il json già presente
     if isPcap:
-        pcap_to_json(pcap_file, output_json)
+        pcap_to_json(probe_file, output_json)
     json_path = output_json
     
     full_dataset = ProbeDataset(path_json=json_path, preprocess=True)
