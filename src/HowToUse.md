@@ -91,9 +91,6 @@ isPcap = True
 
 In questo caso lo script prima converte il PCAP in JSON e poi usa quel JSON per il clustering.
 
----
-
-Sostituiscila con questa:
 
 ## 4. Parametri del dataset
 
