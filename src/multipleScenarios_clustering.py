@@ -14,10 +14,10 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    train_scenarios = [0]  # Lista di scenari per il training
-    test_scenarios = [1]            # Lista di scenari per il test
-    base_path = "Dataset/dataset_burst_label0"   # Percorso base dei file JSON
-    batch_size = 256                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
+    train_scenarios = [0,1]  # Lista di scenari per il training
+    test_scenarios = [2,3]            # Lista di scenari per il test
+    base_path = "Dataset/dataset_burst_json_veri"   # Percorso base dei file JSON
+    batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
