@@ -204,6 +204,7 @@ if __name__ == '__main__':
     weight_concentration_prior = 100.0
     covariance_type = "spherical"
     reg_covar = 1e-4
+    
     pca_components_bayes = 30
 
     # ====================================================================

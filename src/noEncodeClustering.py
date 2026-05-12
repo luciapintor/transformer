@@ -17,7 +17,7 @@ if __name__ == '__main__':
     
     train_scenarios = [0,1,2,3,4,5,6,7]  # Lista di scenari per il training
     test_scenarios = [8,9,10]            # Lista di scenari per il test
-    base_path = "Dataset/dataset_burst_json_veri"   # Percorso base dei file JSON
+    base_path = "Dataset/Catture_Lucia/json/"   # Percorso base dei file JSON
     batch_size = 256                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
     preprocess = True               # Se True, applica preprocessamento ai dati

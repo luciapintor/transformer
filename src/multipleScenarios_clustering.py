@@ -3,6 +3,7 @@ import torch
 import pandas as pd
 
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import MinMaxScaler
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
@@ -90,8 +91,12 @@ if __name__ == '__main__':
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
+    # Applica MinMaxScaler per normalizzare le feature
+    scaler = MinMaxScaler()
+    embeddings_scaled = scaler.fit_transform(embeddings)
+
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-    cluster_labels = dbscan.fit_predict(embeddings)
+    cluster_labels = dbscan.fit_predict(embeddings_scaled)
 
     # True label del test set
     # Servono solo per valutare i cluster trovati           

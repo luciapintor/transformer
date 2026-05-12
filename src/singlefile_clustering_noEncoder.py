@@ -2,8 +2,11 @@ from torch.utils.data import DataLoader
 import torch
 import pandas as pd
 import json
+import numpy as np
+import os
 
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import MinMaxScaler
 
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
@@ -34,15 +37,6 @@ if __name__ == '__main__':
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
 
 # ====================================================================
-#                   PARAMETRI MODELLO
-# ====================================================================
-
-    emb_size = 64           #dimensione dell'embedding finale prodotto dall'encoder
-    hidden_dim = 128        #dimensione del layer nascosto dell'autoencoder
-    epochs = 50             #numero di sessioni di training del modello
-    learning_rate = 1e-3    #tasso di apprendimento per l'ottimizzazione del modello
-
-# ====================================================================
 #                   PARAMETRI CLUSTERING
 # ====================================================================
     eps = 0.1               #raggio massimo per considerare due campioni come vicini in DBSCAN
@@ -57,41 +51,31 @@ if __name__ == '__main__':
         
     full_dataset = ProbeDataset(path_json=json_path, preprocess=preprocess, include_mac_features=include_mac_features)
 
-    #divido il json in train e test
-    dataset_train, dataset_val, dataset_test = full_dataset.separate_train_val_test()
-
-    #dimensioni dei vari dataset
-    n_features = len(full_dataset.data[0])
-    n_probe_train = len(dataset_train)
-    n_probe_test = len(dataset_test)
-
-    train_loader = DataLoader(
-        dataset_train,
-        batch_size=batch_size,
-        shuffle=True,
-        collate_fn=ProbeDataset.collate_probe_batch
-    )
-
+    
     test_loader = DataLoader(
-        dataset_test,
+        full_dataset,
         batch_size=batch_size,
         shuffle=False,
         collate_fn=ProbeDataset.collate_probe_batch
     )
 
-    model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
+    n_probe_test = len(full_dataset.data)    #numero di campioni nel dataset di test
 
-    # train SOLO sugli scenari di training
-    model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate)
+    # Estrai le feature preprocessate dal test dataset
+    print("[INFO] Extracting features from test dataset...")
+    embeddings_list = []
+    for batch in test_loader:
+        features_batch = batch[0]  # Prendi solo le features
+        embeddings_list.append(features_batch)
 
-    # encoding SOLO degli scenari di test
-    embeddings = model.encode_dataloader(dataloader=test_loader)
+    embeddings = np.vstack(embeddings_list)
 
-    if isinstance(embeddings, torch.Tensor):
-        embeddings = embeddings.detach().cpu().numpy()
+    # Applica MinMaxScaler per normalizzare le feature
+    scaler = MinMaxScaler()
+    embeddings_scaled = scaler.fit_transform(embeddings)
 
     dbscan = DBSCAN(eps=eps, min_samples=min_samples)
-    cluster_labels = dbscan.fit_predict(embeddings) 
+    cluster_labels = dbscan.fit_predict(embeddings_scaled) 
 
     # scarto i campioni considerati rumore da DBSCAN per valutare le metriche del clustering        
 
@@ -114,7 +98,7 @@ if __name__ == '__main__':
     print(f"Cluster labels: {set(cluster_labels_filtered)}")     
 
     output_values = []          
-    for i, (features, label, mac_address) in enumerate(dataset_test):           
+    for i, (features, label, mac_address) in enumerate(full_dataset):           
         output_values.append({          
             "sample_index": i,          
             "mac_address": mac_address,       
