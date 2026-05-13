@@ -93,7 +93,8 @@ if __name__ == '__main__':
     print(f"Probe considerate rumore (cluster -1): {discarded_pr} --> {100*(discarded_pr/n_probe_test):.2f}%")
 
     print(f"--------------------------------------------------------------")
-    print("Numero di dispositivi:", len(set(full_dataset.labels)))
+    if not isPcap:
+        print("Numero di dispositivi:", len(set(full_dataset.labels)))
     print(f"Numero di cluster trovati senza rumore: {len(set(cluster_labels_filtered))}")  
     print(f"Cluster labels: {set(cluster_labels_filtered)}")     
 
