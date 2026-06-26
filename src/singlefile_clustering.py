@@ -26,9 +26,9 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    probe_file = "Dataset/Catture_Lucia/pcap/Anechoic1-ts-2024-Jan-22-h11-m42-s46-modeS-ch-6-th-110.pcap"  # Percorso del file pcap da cui estrarre i dati
+    probe_file = "Dataset/dataset_burst_json_veri/scenario_0_burst_features.json"  # Percorso del file pcap da cui estrarre i dati
     output_json = "Dataset/Catture_Lucia/json/Anechoic1-ts-2024-Jan-22-h11-m42-s46-modeS-ch-6-th-110.json"  # Percorso del file JSON di output
-    isPcap = True                 # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
+    isPcap = False                 # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset

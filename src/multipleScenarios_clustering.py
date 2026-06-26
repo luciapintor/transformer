@@ -15,8 +15,8 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    train_scenarios = [0,1]  # Lista di scenari per il training
-    test_scenarios = [2,3]            # Lista di scenari per il test
+    train_scenarios = [0]  # Lista di scenari per il training
+    test_scenarios = [5]            # Lista di scenari per il test
     base_path = "Dataset/dataset_burst_json_veri"   # Percorso base dei file JSON
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
@@ -29,7 +29,7 @@ if __name__ == '__main__':
 
     emb_size = 64           #dimensione dell'embedding finale prodotto dall'encoder
     hidden_dim = 128        #dimensione del layer nascosto dell'autoencoder
-    epochs = 10             #numero di sessioni di training del modello
+    epochs = 100             #numero di sessioni di training del modello
     learning_rate = 1e-3    #tasso di apprendimento per l'ottimizzazione del modello
 
 # ====================================================================
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     scaler = MinMaxScaler()
     embeddings_scaled = scaler.fit_transform(embeddings)
 
-    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='euclidean')
     cluster_labels = dbscan.fit_predict(embeddings_scaled)
 
     # True label del test set

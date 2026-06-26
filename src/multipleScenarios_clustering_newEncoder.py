@@ -61,8 +61,8 @@ if __name__ == '__main__':
     n_probe_train = len(dataset_train.data)  #numero di campioni nel dataset di training
     n_probe_test = len(dataset_test.data)    #numero di campioni nel dataset di test
 
-    # dataset_train.labels = torch.zeros(len(dataset_train.labels), dtype=torch.long)
-    # dataset_test.labels = torch.zeros(len(dataset_test.labels), dtype=torch.long)
+    dataset_train.labels = torch.zeros(len(dataset_train.labels), dtype=torch.long)
+    dataset_test.labels = torch.zeros(len(dataset_test.labels), dtype=torch.long)
 
     train_loader = DataLoader(
         dataset_train,
