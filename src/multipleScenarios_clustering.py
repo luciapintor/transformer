@@ -15,8 +15,8 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    train_scenarios = [0]  # Lista di scenari per il training
-    test_scenarios = [5]            # Lista di scenari per il test
+    train_scenarios = [0,1]  # Lista di scenari per il training
+    test_scenarios = [2,3]   # Lista di scenari per il test
     base_path = "Dataset/dataset_burst_json_veri"   # Percorso base dei file JSON
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
