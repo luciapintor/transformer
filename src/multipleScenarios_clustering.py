@@ -22,6 +22,7 @@ if __name__ == '__main__':
     is_bursts = True               # Se True, tratta i file come file di bursts di PR, altrimenti come file di PR individuali
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
+    normalize = False                 # Se True, normalizza i dati prima di usare DBSCAN
 
 # ====================================================================
 #                   PARAMETRI MODELLO
@@ -60,9 +61,6 @@ if __name__ == '__main__':
     n_probe_train = len(dataset_train.data)  #numero di campioni nel dataset di training
     n_probe_test = len(dataset_test.data)    #numero di campioni nel dataset di test
 
-    # dataset_train.labels = torch.zeros(len(dataset_train.labels), dtype=torch.long)
-    # dataset_test.labels = torch.zeros(len(dataset_test.labels), dtype=torch.long)
-
     train_loader = DataLoader(
         dataset_train,
         batch_size=batch_size,
@@ -79,9 +77,6 @@ if __name__ == '__main__':
 
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
 
-    # train_loader.dataset.labels = torch.zeros(len(train_loader.dataset.labels), dtype=torch.long)
-    # test_loader.dataset.labels = torch.zeros(len(test_loader.dataset.labels), dtype=torch.long)
-
     # train SOLO sugli scenari di training
     model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate)
 
@@ -92,11 +87,13 @@ if __name__ == '__main__':
         embeddings = embeddings.detach().cpu().numpy()
 
     # Applica MinMaxScaler per normalizzare le feature
-    scaler = MinMaxScaler()
-    embeddings_scaled = scaler.fit_transform(embeddings)
+    if normalize:
+        scaler = MinMaxScaler()
+        embeddings_scaled = scaler.fit_transform(embeddings)
+        embeddings = embeddings_scaled  # Aggiorna embeddings con le versioni scalate
 
     dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric='euclidean')
-    cluster_labels = dbscan.fit_predict(embeddings_scaled)
+    cluster_labels = dbscan.fit_predict(embeddings)
 
     # True label del test set
     # Servono solo per valutare i cluster trovati           
