@@ -85,7 +85,7 @@ class MatrixAutoencoder(nn.Module):
         Forward pass completo: input → encoder → decoder → output.
         Restituisce sia la ricostruzione x_hat che l'embedding z.
         """
-        z     = self.encoder(x)      # (batch, emb_size)
+        z = self.encoder(x)      # (batch, emb_size)
         x_hat = self.decoder(z)      # (batch, n_features)
         return x_hat, z
 

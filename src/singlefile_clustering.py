@@ -8,17 +8,23 @@ from sklearn.cluster import DBSCAN
 from transformer_utils.matrix_autoencoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 from prepare_dataset.probe_dataset import ProbeDataset
-from converting_pcap.extract_features import extract_from_pcap
+from converting_pcap.extract_features_fixed import extract_from_pcap
 
-def pcap_to_json(pcap_file, output_json):
-    dataset = extract_from_pcap(pcap_file=pcap_file)
+def pcap_to_json(pcap_file, output_json, max_packets=None):
+    dataset = extract_from_pcap(
+        pcap_file=pcap_file,
+        max_packets=max_packets
+    )
 
-    #aggiungo label fittizzia, solo per avere un formato standard
+    # aggiungo label fittizia, solo per avere un formato standard
     for record in dataset:
         record["label"] = -1
 
     with open(output_json, "w") as f:
         json.dump(dataset, f, indent=4)
+
+    print(f"JSON creato: {output_json}")
+    print(f"Pacchetti salvati: {len(dataset)}")
 
 if __name__ == '__main__':
 
@@ -26,9 +32,9 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    probe_file = "Dataset/dataset_burst_json_veri/scenario_0_burst_features.json"  # Percorso del file pcap da cui estrarre i dati
-    output_json = "Dataset/Catture_Lucia/json/Anechoic1-ts-2024-Jan-22-h11-m42-s46-modeS-ch-6-th-110.json"  # Percorso del file JSON di output
-    isPcap = False                 # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
+    probe_file ="/tmp/uji_probes.pcap"  # Percorso del file pcap da cui estrarre i dati
+    output_json = "/home/giuff/Tesi/Dataset/Uji_Dataset/probe_Uji_Dataset.json"  # Percorso del file JSON di output
+    isPcap = True                 # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
     preprocess = True               # Se True, applica preprocessamento ai dati
     include_mac_features = False    # Se True, include gli indirizzi MAC nel dataset
@@ -50,7 +56,7 @@ if __name__ == '__main__':
 
     #converto il pcap in json se isPcap è True, altrimenti uso direttamente il json già presente
     if isPcap:
-        pcap_to_json(probe_file, output_json)
+        pcap_to_json(probe_file, output_json, max_packets=None)
         json_path = output_json
     else:
         json_path = probe_file

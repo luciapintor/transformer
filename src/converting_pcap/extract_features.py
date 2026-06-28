@@ -41,7 +41,25 @@ def extract_from_pcap(pcap_file):
 def extract_timestamp(pcap_frame):
     timestamp_str = str(pcap_frame.sniff_timestamp)
 
-    timestamp_datetime = datetime.fromtimestamp(float(timestamp_str))
+    # Caso 1: timestamp numerico, es. "1700000000.123456"
+    try:
+        timestamp_datetime = datetime.fromtimestamp(float(timestamp_str))
+        return timestamp_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    except ValueError:
+        pass
+
+    # Caso 2: timestamp ISO, es. "2023-02-28T10:06:13.608248000Z"
+    if timestamp_str.endswith("Z"):
+        timestamp_str = timestamp_str[:-1]
+
+    # Python gestisce massimo 6 cifre per i microsecondi.
+    # Qui UJI ha 9 cifre: 608248000, quindi tagliamo a 6.
+    if "." in timestamp_str:
+        date_part, frac_part = timestamp_str.split(".")
+        frac_part = frac_part[:6]
+        timestamp_str = f"{date_part}.{frac_part}"
+
+    timestamp_datetime = datetime.fromisoformat(timestamp_str)
 
     return timestamp_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")
 
