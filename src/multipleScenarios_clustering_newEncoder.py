@@ -1,4 +1,5 @@
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
+from pathlib import Path
 import torch
 import pandas as pd
 import numpy as np
@@ -13,79 +14,71 @@ from prepare_dataset.probe_dataset import ProbeDataset
 if __name__ == '__main__':
 
 # ====================================================================
-#   PARAMETRI DATASET
+#   SCENARIO_TEMPLATE
 #
-#   Si usano scenari diversi per training e test, in modo che il modello
-#   venga valutato su device mai visti durante il training.
+#   Metti il path completo con {N} come placeholder per il numero
+#   di scenario. Esempio:
+#     "/home/giuff/Tesi/Dataset/.../scenario_{N}_full.json"
+# ====================================================================
+
+    SCENARIO_TEMPLATE = (
+        "/home/giuff/Tesi/Dataset/dataset_merged_probes_json/data with labels"
+        "/scenario_{N}_full.json"
+    )
+
+    def load_scenarios(scenario_list):
+        datasets = []
+        for n in scenario_list:
+            path = SCENARIO_TEMPLATE.replace("{N}", str(n))
+            if not Path(path).exists():
+                raise FileNotFoundError(f"Scenario {n} non trovato: {path}")
+            print(f"  Carico scenario {n}: {Path(path).name}")
+            ds = ProbeDataset(
+                path_json=path,
+                is_bursts=is_bursts,
+                preprocess=preprocess,
+                include_mac_features=include_mac_features,
+            )
+            datasets.append(ds)
+        return datasets[0] if len(datasets) == 1 else ConcatDataset(datasets)
+
+# ====================================================================
+#   PARAMETRI DATASET
 # ====================================================================
 
     train_scenarios      = [0, 1]
     test_scenarios       = [2, 3]
-    base_path            = "Dataset/dataset_burst_json_veri"
     batch_size           = 64
-    is_bursts            = True    # ogni record è un burst di PR (non una singola PR)
-    preprocess           = True    # applica ie_to_transformerIE → vettore 140 feature
-    include_mac_features = False   # il MAC non entra nelle feature (è la label)
+    is_bursts            = True
+    preprocess           = True
+    include_mac_features = False
 
 # ====================================================================
 #   PARAMETRI MODELLO
 # ====================================================================
 
-    emb_size      = 64     # dimensione dello spazio latente dell'encoder
-    hidden_dim    = 128    # dimensione del layer nascosto intermedio
+    emb_size      = 64
+    hidden_dim    = 128
     epochs        = 30
     learning_rate = 1e-3
 
 # ====================================================================
 #   PARAMETRI CLUSTERING
-#
-#   eps viene stimato automaticamente ad ogni epoch dentro fit_clustering
-#   tramite il metodo delle k-distanze, quindi il valore qui sotto viene
-#   usato solo da DBSCAN sul test set finale. Viene sovrascritto con
-#   l'eps stimato sugli embedding del test set.
-#   min_samples: numero minimo di PR in un intorno per formare un cluster.
 # ====================================================================
 
     min_samples = 4
 
 # ====================================================================
 #   CARICAMENTO DATASET
-#
-#   ProbeDataset.from_scenario_list carica e concatena i JSON di tutti
-#   gli scenari indicati. Con preprocess=True, ogni record viene passato
-#   attraverso ie_to_transformerIE.preprocess_burst, che converte le IE
-#   grezze in un vettore numerico di 140 feature.
 # ====================================================================
 
-    dataset_train = ProbeDataset.from_scenario_list(
-        scenario_list=train_scenarios,
-        base_path=base_path,
-        is_bursts=is_bursts,
-        preprocess=preprocess,
-        include_mac_features=include_mac_features
-    )
+    dataset_train = load_scenarios(train_scenarios)
+    dataset_test  = load_scenarios(test_scenarios)
 
-    dataset_test = ProbeDataset.from_scenario_list(
-        scenario_list=test_scenarios,
-        base_path=base_path,
-        is_bursts=is_bursts,
-        preprocess=preprocess,
-        include_mac_features=include_mac_features
-    )
+    n_features    = len(dataset_train.data[0]) if hasattr(dataset_train, 'data') else len(dataset_train[0][0])
+    n_probe_train = len(dataset_train)
+    n_probe_test  = len(dataset_test)
 
-    # NOTA IMPORTANTE: le label NON vanno azzerate.
-    # Servono a fit_clustering per la surrogate loss (prototype/contrastive).
-    # Nel vecchio codice venivano azzerate con torch.zeros(...), rendendo
-    # il training completamente cieco: la prototype_loss riceveva una sola
-    # classe e restituiva sempre 0. → BUG RIMOSSO.
-
-    n_features    = len(dataset_train.data[0])  # 140 con preprocess=True
-    n_probe_train = len(dataset_train.data)
-    n_probe_test  = len(dataset_test.data)
-
-    # I DataLoader gestiscono il batching. shuffle=True in training
-    # aiuta la surrogate loss a vedere campioni di classi diverse
-    # nello stesso batch. In test shuffle=False per mantenere l'ordine.
     train_loader = DataLoader(
         dataset_train,
         batch_size=batch_size,
@@ -102,12 +95,6 @@ if __name__ == '__main__':
 
 # ====================================================================
 #   TRAINING
-#
-#   fit_clustering ottimizza la loss combinata:
-#     total = surrogate_loss * 0.7  +  recon_loss * 0.3
-#
-#   Ad ogni epoch stima automaticamente eps sugli embedding correnti
-#   e lo usa per valutare DBSCAN (solo per monitoraggio).
 # ====================================================================
 
     model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
@@ -124,11 +111,6 @@ if __name__ == '__main__':
 
 # ====================================================================
 #   ENCODING DEL TEST SET
-#
-#   encode_dataloader passa tutte le PR del test set attraverso l'encoder
-#   addestrato e restituisce gli embedding (n_test, emb_size).
-#   Nessuno scaling viene applicato: DBSCAN opera direttamente nello
-#   spazio euclideo dell'encoder, dove le distanze sono significative.
 # ====================================================================
 
     enc_out = model.encode_dataloader(dataloader=test_loader)
@@ -140,15 +122,14 @@ if __name__ == '__main__':
                       else np.array(returned_labels)
     else:
         embeddings  = enc_out
-        true_labels = np.array(dataset_test.labels)
+        true_labels = np.array(
+            dataset_test.labels if hasattr(dataset_test, 'labels')
+            else [dataset_test[i][1] for i in range(len(dataset_test))]
+        )
 
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
-    # Stima eps sugli embedding del test set con lo stesso metodo usato
-    # durante il training: k-distanze con k = min_samples, percentile 90.
-    # Questo garantisce che eps sia calibrato sulla geometria attuale degli
-    # embedding, senza bisogno di trovarlo a mano.
     eps_test, k_distances = MatrixAutoencoder.estimate_eps(
         embeddings, k=min_samples, percentile=90
     )
@@ -157,19 +138,14 @@ if __name__ == '__main__':
           f"max={k_distances.max():.4f}, "
           f"median={np.median(k_distances):.4f})")
 
-    # DBSCAN sugli embedding grezzi (senza scaling) con eps stimato
     dbscan         = DBSCAN(eps=eps_test, min_samples=min_samples)
     cluster_labels = dbscan.fit_predict(embeddings)
 
-    # Le true label vengono rilette dal dataset (non sono state azzerate)
-    true_labels = dataset_test.labels
+    true_labels = dataset_test.labels if hasattr(dataset_test, 'labels') else \
+                  [dataset_test[i][1] for i in range(len(dataset_test))]
 
 # ====================================================================
 #   VALUTAZIONE
-#
-#   DBSCAN assegna label -1 ai punti considerati rumore (outlier).
-#   Si filtrano prima di calcolare le metriche, così si valuta solo
-#   la qualità del clustering sui punti effettivamente assegnati.
 # ====================================================================
 
     true_labels_filtered    = []
@@ -193,7 +169,7 @@ if __name__ == '__main__':
     print(f"Homogeneity:  {metrics['homogeneity']:.4f}")
     print(f"Completeness: {metrics['completeness']:.4f}")
     print(f"V-measure:    {metrics['v_measure']:.4f}")
-    print(f"Classi vere:  {len(set(dataset_test.labels))}")
+    print(f"Classi vere:  {len(set(true_labels))}")
     print(f"Cluster trovati: {len(set(cluster_labels_filtered))}")
     print("==========================================================\n")
 
