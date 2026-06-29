@@ -21,8 +21,8 @@ if __name__ == '__main__':
 # ====================================================================
 
     SCENARIO_TEMPLATE = (
-        "/home/giuff/Tesi/Dataset/dataset_merged_probes_json/data with labels"
-        "/scenario_{N}_full.json"
+        "/home/giuff/Tesi/TransformerTry/Dataset/dataset_burst_json_veri"
+        "/scenario_{N}_burst_features.json"
     )
 
     def load_scenarios(scenario_list):
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     train_scenarios      = [0, 1]
     test_scenarios       = [2, 3]
     batch_size           = 64
-    is_bursts            = True
+    is_bursts            = True    #se è impostato a False si consiglia di impostare normalize a True, viceversa il contrario
     preprocess           = True
     include_mac_features = False
     normalize            = False
@@ -59,14 +59,14 @@ if __name__ == '__main__':
 
     emb_size      = 64
     hidden_dim    = 128
-    epochs        = 100
+    epochs        = 50
     learning_rate = 1e-3
 
 # ====================================================================
 #   PARAMETRI CLUSTERING
 # ====================================================================
 
-    eps         = 0.1
+    eps         = 0.01
     min_samples = 4
 
 # ====================================================================

@@ -45,6 +45,7 @@ def print_clustering_results(true_labels, cluster_labels):
     print(f"Number of samples:                        {len(true_labels)}")
     print(f"Number of classes:                        {num_classes}")
     print(f"Number of clusters found (noise excluded):{num_clusters}")
+    print(f"Error:                                    {num_classes - num_clusters}")
     print(f"Number of noise points:                   {num_noise_points}")
 
     if len(cluster_labels_filtered) == 0:
@@ -76,8 +77,8 @@ if __name__ == "__main__":
 # ====================================================================
 
     SCENARIO_TEMPLATE = (
-        "/home/giuff/Tesi/TransformerTry/Dataset/dataset_merged_probes_json/data with labels"
-        "/scenario_{N}_full.json"
+        "/home/giuff/Tesi/TransformerTry/Dataset/dataset_burst_json_veri"
+        "/scenario_{N}_burst_features.json"
     )
 
     def load_scenarios(scenario_list):
@@ -100,9 +101,9 @@ if __name__ == "__main__":
 #   PARAMETRI DATASET
 # ====================================================================
 
-    scenarios_to_cluster = [1,2,3]
+    scenarios_to_cluster = [0,1,3]
     batch_size           = 256
-    is_bursts            = False
+    is_bursts            = True
     preprocess           = True
     include_mac_features = False
 
@@ -110,7 +111,7 @@ if __name__ == "__main__":
 #   PARAMETRI CLUSTERING
 # ====================================================================
 
-    eps         = 0.1
+    eps         = 0.001
     min_samples = 4
     use_scaler  = True
 
