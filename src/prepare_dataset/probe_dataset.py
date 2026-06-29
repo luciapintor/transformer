@@ -23,7 +23,6 @@ class ProbeDataset(Dataset):
     def __init__(
         self,
         path_json,
-        is_bursts=False,
         preprocess: bool = False,
         include_mac_features: bool = False
     ):

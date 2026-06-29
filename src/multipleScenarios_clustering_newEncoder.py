@@ -1,4 +1,4 @@
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from pathlib import Path
 import torch
 import pandas as pd
@@ -9,6 +9,83 @@ from sklearn.cluster import DBSCAN
 from transformer_utils.newEncoder import MatrixAutoencoder
 from transformer_utils.evaluation_metric_calc import calc_evaluation_metrics
 from prepare_dataset.probe_dataset import ProbeDataset
+
+
+class ConstantFeatureFilteredDataset(Dataset):
+    """Wrapper che applica una maschera di feature senza duplicare tutto il dataset in RAM."""
+
+    def __init__(self, base_dataset, selected_feature_names):
+        self.base_dataset = base_dataset
+        self.selected_feature_names = list(selected_feature_names)
+
+    def __len__(self):
+        return len(self.base_dataset)
+
+    def __getitem__(self, idx):
+        record, label, mac_address = self.base_dataset[idx]
+
+        filtered_record = {
+            name: record.get(name, 0.0)
+            for name in self.selected_feature_names
+        }
+
+        return filtered_record, label, mac_address
+
+
+def compute_non_constant_feature_names(dataset, batch_size, variance_threshold=1e-12):
+    """Calcola sul TRAIN le feature non costanti, senza materializzare tutto il dataset."""
+
+    first_record = dataset[0][0]
+    feature_names = sorted(first_record.keys())
+
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=ProbeDataset.collate_probe_batch
+    )
+
+    n_samples = 0
+    feature_sum = None
+    feature_sum_sq = None
+
+    for batch in loader:
+        features_batch = batch[0]
+
+        if isinstance(features_batch, torch.Tensor):
+            features_batch = features_batch.detach().cpu().numpy()
+
+        features_batch = np.asarray(features_batch, dtype=np.float64)
+        features_batch = np.nan_to_num(features_batch, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if feature_sum is None:
+            n_features = features_batch.shape[1]
+            feature_sum = np.zeros(n_features, dtype=np.float64)
+            feature_sum_sq = np.zeros(n_features, dtype=np.float64)
+
+        feature_sum += np.sum(features_batch, axis=0)
+        feature_sum_sq += np.sum(features_batch ** 2, axis=0)
+        n_samples += features_batch.shape[0]
+
+    feature_mean = feature_sum / n_samples
+    feature_variance = (feature_sum_sq / n_samples) - (feature_mean ** 2)
+    feature_mask = feature_variance > variance_threshold
+
+    selected_feature_names = [
+        name for name, keep in zip(feature_names, feature_mask)
+        if keep
+    ]
+
+    n_original_features = len(feature_names)
+    n_selected_features = len(selected_feature_names)
+    n_removed_features = n_original_features - n_selected_features
+
+    print("[INFO] Removing constant features using TRAIN set...")
+    print(f"[INFO] Original features: {n_original_features}")
+    print(f"[INFO] Selected features: {n_selected_features}")
+    print(f"[INFO] Removed constant features: {n_removed_features}")
+
+    return selected_feature_names
 
 
 if __name__ == '__main__':
@@ -35,7 +112,6 @@ if __name__ == '__main__':
             print(f"  Carico scenario {n}: {Path(path).name}")
             ds = ProbeDataset(
                 path_json=path,
-                is_bursts=is_bursts,
                 preprocess=preprocess,
                 include_mac_features=include_mac_features,
             )
@@ -49,9 +125,9 @@ if __name__ == '__main__':
     train_scenarios      = [0, 1]
     test_scenarios       = [2, 3]
     batch_size           = 64
-    is_bursts            = True
     preprocess           = True
     include_mac_features = False
+    remove_constant_features = True
 
 # ====================================================================
 #   PARAMETRI MODELLO
@@ -75,9 +151,24 @@ if __name__ == '__main__':
     dataset_train = load_scenarios(train_scenarios)
     dataset_test  = load_scenarios(test_scenarios)
 
-    n_features    = len(dataset_train.data[0]) if hasattr(dataset_train, 'data') else len(dataset_train[0][0])
     n_probe_train = len(dataset_train)
     n_probe_test  = len(dataset_test)
+
+    if remove_constant_features:
+        selected_feature_names = compute_non_constant_feature_names(
+            dataset_train,
+            batch_size=batch_size
+        )
+        dataset_train = ConstantFeatureFilteredDataset(dataset_train, selected_feature_names)
+        dataset_test = ConstantFeatureFilteredDataset(dataset_test, selected_feature_names)
+        n_features = len(selected_feature_names)
+    else:
+        first_record = dataset_train[0][0]
+        n_features = len(first_record)
+
+    print(f"[INFO] Number of train samples: {n_probe_train}")
+    print(f"[INFO] Number of test samples:  {n_probe_test}")
+    print(f"[INFO] Number of input features: {n_features}")
 
     train_loader = DataLoader(
         dataset_train,
@@ -113,7 +204,9 @@ if __name__ == '__main__':
 #   ENCODING DEL TEST SET
 # ====================================================================
 
+    print("[INFO] Encoding test set...")
     enc_out = model.encode_dataloader(dataloader=test_loader)
+    print("[INFO] Encoding completed.")
 
     if isinstance(enc_out, tuple):
         embeddings, returned_labels = enc_out
@@ -122,13 +215,13 @@ if __name__ == '__main__':
                       else np.array(returned_labels)
     else:
         embeddings  = enc_out
-        true_labels = np.array(
-            dataset_test.labels if hasattr(dataset_test, 'labels')
-            else [dataset_test[i][1] for i in range(len(dataset_test))]
-        )
+        true_labels = np.array([dataset_test[i][1] for i in range(len(dataset_test))])
 
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
+
+    embeddings = embeddings.astype(np.float32)
+    print(f"[INFO] Embeddings shape: {embeddings.shape}")
 
     eps_test, k_distances = MatrixAutoencoder.estimate_eps(
         embeddings, k=min_samples, percentile=90
@@ -138,11 +231,14 @@ if __name__ == '__main__':
           f"max={k_distances.max():.4f}, "
           f"median={np.median(k_distances):.4f})")
 
-    dbscan         = DBSCAN(eps=eps_test, min_samples=min_samples)
+    print(f"[INFO] Running DBSCAN (eps={eps_test:.4f}, min_samples={min_samples})...")
+    dbscan = DBSCAN(
+        eps=eps_test,
+        min_samples=min_samples,
+        n_jobs=1
+    )
     cluster_labels = dbscan.fit_predict(embeddings)
-
-    true_labels = dataset_test.labels if hasattr(dataset_test, 'labels') else \
-                  [dataset_test[i][1] for i in range(len(dataset_test))]
+    print("[INFO] DBSCAN completed.")
 
 # ====================================================================
 #   VALUTAZIONE
@@ -178,7 +274,7 @@ if __name__ == '__main__':
 # ====================================================================
 
     output_values = []
-    for i, (features, label, mac_address) in enumerate(dataset_test):
+    for i, (_, label, mac_address) in enumerate(dataset_test):
         output_values.append({
             "sample_index": i,
             "mac_address":  mac_address,
@@ -188,4 +284,8 @@ if __name__ == '__main__':
 
     df = pd.DataFrame(output_values).sort_values("true_label")
     print(df)
-    df.to_csv("transformer/clustering_output/output_newEncoder.csv", index=False)
+
+    output_path = Path("transformer/clustering_output/output_newEncoder.csv")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    print(f"[INFO] Results saved to {output_path}")

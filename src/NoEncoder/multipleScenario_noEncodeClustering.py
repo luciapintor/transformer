@@ -77,8 +77,8 @@ if __name__ == "__main__":
 # ====================================================================
 
     SCENARIO_TEMPLATE = (
-        "/home/giuff/Tesi/TransformerTry/Dataset/dataset_burst_json_veri"
-        "/scenario_{N}_burst_features.json"
+        "/home/giuff/Tesi/TransformerTry/Dataset/dataset_merged_probes_json/data with labels"
+        "/scenario_{N}_full.json"
     )
 
     def load_scenarios(scenario_list):
@@ -90,7 +90,6 @@ if __name__ == "__main__":
             print(f"  Carico scenario {n}: {Path(path).name}")
             ds = ProbeDataset(
                 path_json=path,
-                is_bursts=is_bursts,
                 preprocess=preprocess,
                 include_mac_features=include_mac_features,
             )
@@ -101,11 +100,11 @@ if __name__ == "__main__":
 #   PARAMETRI DATASET
 # ====================================================================
 
-    scenarios_to_cluster = [0,1,3]
+    scenarios_to_cluster = [1, 2 ,3]
     batch_size           = 256
-    is_bursts            = True
     preprocess           = True
     include_mac_features = False
+    remove_constant_features = True
 
 # ====================================================================
 #   PARAMETRI CLUSTERING
@@ -146,14 +145,35 @@ if __name__ == "__main__":
 #   ESTRAZIONE FEATURE E NORMALIZZAZIONE
 # ====================================================================
 
-    print("[INFO] Extracting preprocessed features...")
-    features = extract_features_from_loader(loader)
-    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-    print(f"[INFO] Feature matrix shape: {features.shape}")
+print("[INFO] Extracting preprocessed features...")
+features = extract_features_from_loader(loader)
+features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
-    if use_scaler:
-        print("[INFO] Applying MinMaxScaler...")
-        features = MinMaxScaler().fit_transform(features)
+print(f"[INFO] Feature matrix shape before selection: {features.shape}")
+
+# ====================================================================
+#   RIMOZIONE FEATURE COSTANTI
+# ====================================================================
+
+if remove_constant_features:
+    feature_variance = np.var(features, axis=0)
+    feature_mask = feature_variance > 0
+
+    n_original_features = features.shape[1]
+    n_selected_features = int(np.sum(feature_mask))
+    n_removed_features = n_original_features - n_selected_features
+
+    features = features[:, feature_mask]
+
+    print("[INFO] Removing constant features...")
+    print(f"[INFO] Original features: {n_original_features}")
+    print(f"[INFO] Selected features: {n_selected_features}")
+    print(f"[INFO] Removed constant features: {n_removed_features}")
+    print(f"[INFO] Feature matrix shape after selection: {features.shape}")
+
+if use_scaler:
+    print("[INFO] Applying MinMaxScaler...")
+    features = MinMaxScaler().fit_transform(features)
 
 # ====================================================================
 #   DBSCAN
