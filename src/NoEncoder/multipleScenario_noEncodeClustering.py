@@ -35,18 +35,21 @@ def print_clustering_results(true_labels, cluster_labels):
             true_labels_filtered.append(true_label)
             cluster_labels_filtered.append(cluster_label)
 
-    num_classes      = len(set(true_labels))
-    num_clusters     = len(set(cluster_labels_filtered))
-    num_noise_points = int(np.sum(cluster_labels == -1))
+    n_total           = len(true_labels)
+    num_classes        = len(set(true_labels))
+    num_clusters        = len(set(cluster_labels_filtered))
+    num_noise_points     = int(np.sum(cluster_labels == -1))
+    noise_percentage     = 100 * num_noise_points / n_total if n_total > 0 else 0.0
 
     print("\n" + "=" * 60)
     print("CLUSTERING RESULTS - NO ENCODER")
     print("=" * 60)
-    print(f"Number of samples:                        {len(true_labels)}")
+    print(f"Number of samples:                        {n_total}")
     print(f"Number of classes:                        {num_classes}")
     print(f"Number of clusters found (noise excluded):{num_clusters}")
-    print(f"Error:                                    {num_classes - num_clusters}")
+    print(f"Error (classes - clusters):               {num_classes - num_clusters}")
     print(f"Number of noise points:                   {num_noise_points}")
+    print(f"Percentage of probes as noise:             {noise_percentage:.2f}%")
 
     if len(cluster_labels_filtered) == 0:
         print("\n[WARNING] DBSCAN ha classificato tutti i punti come rumore.")
@@ -100,19 +103,25 @@ if __name__ == "__main__":
 #   PARAMETRI DATASET
 # ====================================================================
 
-    scenarios_to_cluster = [1, 2 ,3]
-    batch_size           = 256
-    preprocess           = True
-    include_mac_features = False
-    remove_constant_features = True
+    scenarios_to_cluster     = [0,1,2,3]
+    batch_size               = 256
+    preprocess                = True
+    include_mac_features      = False
+    remove_constant_features  = True
 
 # ====================================================================
 #   PARAMETRI CLUSTERING
 # ====================================================================
 
-    eps         = 0.001
-    min_samples = 4
     use_scaler  = True
+    eps = 0.001
+    # -------------------------------------------------------------------
+    # MIN_SAMPLES DINAMICO
+    # -------------------------------------------------------------------
+    MIN_SAMPLES_COEF = 0.28
+    MIN_SAMPLES_COEF = 0
+    MIN_SAMPLES_FLOOR = 4   # non scendere mai sotto questo valore
+    
 
 # ====================================================================
 #   OUTPUT
@@ -134,6 +143,14 @@ if __name__ == "__main__":
                   [dataset[i][1] for i in range(len(dataset))]
     print(f"[INFO] Number of true labels: {len(set(true_labels))}")
 
+    # Calcolo dinamico di min_samples in base alla dimensione del dataset
+    import math
+    n_samples   = len(dataset)
+    min_samples = max(MIN_SAMPLES_FLOOR,
+                      int(MIN_SAMPLES_COEF * math.sqrt(n_samples)))
+    print(f"[INFO] min_samples dinamico: {MIN_SAMPLES_COEF} * sqrt({n_samples}) "
+          f"= {MIN_SAMPLES_COEF * math.sqrt(n_samples):.1f} → {min_samples}")
+
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -145,35 +162,35 @@ if __name__ == "__main__":
 #   ESTRAZIONE FEATURE E NORMALIZZAZIONE
 # ====================================================================
 
-print("[INFO] Extracting preprocessed features...")
-features = extract_features_from_loader(loader)
-features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+    print("[INFO] Extracting preprocessed features...")
+    features = extract_features_from_loader(loader)
+    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
-print(f"[INFO] Feature matrix shape before selection: {features.shape}")
+    print(f"[INFO] Feature matrix shape before selection: {features.shape}")
 
 # ====================================================================
 #   RIMOZIONE FEATURE COSTANTI
 # ====================================================================
 
-if remove_constant_features:
-    feature_variance = np.var(features, axis=0)
-    feature_mask = feature_variance > 0
+    if remove_constant_features:
+        feature_variance = np.var(features, axis=0)
+        feature_mask     = feature_variance > 0
 
-    n_original_features = features.shape[1]
-    n_selected_features = int(np.sum(feature_mask))
-    n_removed_features = n_original_features - n_selected_features
+        n_original_features = features.shape[1]
+        n_selected_features = int(np.sum(feature_mask))
+        n_removed_features  = n_original_features - n_selected_features
 
-    features = features[:, feature_mask]
+        features = features[:, feature_mask]
 
-    print("[INFO] Removing constant features...")
-    print(f"[INFO] Original features: {n_original_features}")
-    print(f"[INFO] Selected features: {n_selected_features}")
-    print(f"[INFO] Removed constant features: {n_removed_features}")
-    print(f"[INFO] Feature matrix shape after selection: {features.shape}")
+        print("[INFO] Removing constant features...")
+        print(f"[INFO] Original features: {n_original_features}")
+        print(f"[INFO] Selected features: {n_selected_features}")
+        print(f"[INFO] Removed constant features: {n_removed_features}")
+        print(f"[INFO] Feature matrix shape after selection: {features.shape}")
 
-if use_scaler:
-    print("[INFO] Applying MinMaxScaler...")
-    features = MinMaxScaler().fit_transform(features)
+    if use_scaler:
+        print("[INFO] Applying MinMaxScaler...")
+        features = MinMaxScaler().fit_transform(features)
 
 # ====================================================================
 #   DBSCAN

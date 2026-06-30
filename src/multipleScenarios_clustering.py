@@ -1,5 +1,6 @@
 from torch.utils.data import DataLoader, ConcatDataset, Dataset
 from pathlib import Path
+import math
 import torch
 import pandas as pd
 import numpy as np
@@ -104,39 +105,45 @@ if __name__ == '__main__':
         "/scenario_{N}_full.json"
     )
 
-
     def load_scenarios(scenario_list):
         datasets = []
+
         for n in scenario_list:
             path = SCENARIO_TEMPLATE.replace("{N}", str(n))
+
             if not Path(path).exists():
                 raise FileNotFoundError(f"Scenario {n} non trovato: {path}")
+
             print(f"  Carico scenario {n}: {Path(path).name}")
+
             ds = ProbeDataset(
                 path_json=path,
                 preprocess=preprocess,
                 include_mac_features=include_mac_features,
             )
+
             datasets.append(ds)
+
         return datasets[0] if len(datasets) == 1 else ConcatDataset(datasets)
 
 # ====================================================================
 #   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
 
-    train_scenarios      = [0]
-    test_scenarios       = [1, 2, 3]
-    batch_size           = 64
+    train_scenarios      = [0, 1]
+    test_scenarios       = [3]
+
+    batch_size           = 256
     preprocess           = True
     include_mac_features = False
-    normalize            = False
+    normalize            = True
     remove_constant_features = True
 
 # ====================================================================
 #   PARAMETRI MODELLO
 # ====================================================================
 
-    emb_size      = 64
+    emb_size      = 16
     hidden_dim    = 128
     epochs        = 50
     learning_rate = 1e-3
@@ -145,34 +152,72 @@ if __name__ == '__main__':
 #   PARAMETRI CLUSTERING
 # ====================================================================
 
-    eps         = 0.01
-    min_samples = 4
+    eps = 0.001
+
+    # min_samples dinamico 
+    MIN_SAMPLES_COEF = 0
+    MIN_SAMPLES_FLOOR = 4
 
 # ====================================================================
 #   CARICAMENTO DATASET
 # ====================================================================
 
+    print("[INFO] Loading train scenarios...")
     dataset_train = load_scenarios(train_scenarios)
-    dataset_test  = load_scenarios(test_scenarios)
+
+    print("[INFO] Loading test scenarios...")
+    dataset_test = load_scenarios(test_scenarios)
 
     n_probe_train = len(dataset_train)
     n_probe_test  = len(dataset_test)
+
+    # DBSCAN viene applicato sugli embedding del TEST.
+    # Quindi n_samples deve essere il numero di probe del test set.
+    n_samples = n_probe_test
+
+    min_samples = max(
+        MIN_SAMPLES_FLOOR,
+        int(MIN_SAMPLES_COEF * math.sqrt(n_samples))
+    )
+
+    print(f"[INFO] Number of train samples: {n_probe_train}")
+    print(f"[INFO] Number of test samples:  {n_probe_test}")
+    print(
+        f"[INFO] min_samples dinamico: {MIN_SAMPLES_COEF} * sqrt({n_samples}) "
+        f"= {MIN_SAMPLES_COEF * math.sqrt(n_samples):.1f} -> {min_samples}"
+    )
+
+# ====================================================================
+#   RIMOZIONE FEATURE COSTANTI
+# ====================================================================
 
     if remove_constant_features:
         selected_feature_names = compute_non_constant_feature_names(
             dataset_train,
             batch_size=batch_size
         )
-        dataset_train = ConstantFeatureFilteredDataset(dataset_train, selected_feature_names)
-        dataset_test = ConstantFeatureFilteredDataset(dataset_test, selected_feature_names)
+
+        dataset_train = ConstantFeatureFilteredDataset(
+            dataset_train,
+            selected_feature_names
+        )
+
+        dataset_test = ConstantFeatureFilteredDataset(
+            dataset_test,
+            selected_feature_names
+        )
+
         n_features = len(selected_feature_names)
+
     else:
         first_record = dataset_train[0][0]
         n_features = len(first_record)
 
-    print(f"[INFO] Number of train samples: {n_probe_train}")
-    print(f"[INFO] Number of test samples:  {n_probe_test}")
     print(f"[INFO] Number of input features: {n_features}")
+
+# ====================================================================
+#   DATALOADER
+# ====================================================================
 
     train_loader = DataLoader(
         dataset_train,
@@ -188,71 +233,149 @@ if __name__ == '__main__':
         collate_fn=ProbeDataset.collate_probe_batch
     )
 
-    model = MatrixAutoencoder(n_features, emb_size=emb_size, hidden_dim=hidden_dim)
-    model.fit(dataloader=train_loader, epochs=epochs, lr=learning_rate)
+# ====================================================================
+#   TRAINING AUTOENCODER
+# ====================================================================
+
+    print("[INFO] Training autoencoder...")
+
+    model = MatrixAutoencoder(
+        n_features,
+        emb_size=emb_size,
+        hidden_dim=hidden_dim
+    )
+
+    model.fit(
+        dataloader=train_loader,
+        epochs=epochs,
+        lr=learning_rate
+    )
+
+    print("[INFO] Autoencoder training completed.")
+
+# ====================================================================
+#   ENCODING TEST SET
+# ====================================================================
 
     print("[INFO] Encoding test set...")
-    embeddings = model.encode_dataloader(dataloader=test_loader)
+
+    embeddings = model.encode_dataloader(
+        dataloader=test_loader
+    )
+
     print("[INFO] Encoding completed.")
 
     if isinstance(embeddings, torch.Tensor):
         embeddings = embeddings.detach().cpu().numpy()
 
     embeddings = embeddings.astype(np.float32)
+
     print(f"[INFO] Embeddings shape: {embeddings.shape}")
+
+# ====================================================================
+#   NORMALIZZAZIONE EMBEDDING
+# ====================================================================
 
     if normalize:
         print("[INFO] Applying MinMaxScaler to embeddings...")
         scaler = MinMaxScaler()
         embeddings = scaler.fit_transform(embeddings).astype(np.float32)
 
+# ====================================================================
+#   DBSCAN
+# ====================================================================
+
     print(f"[INFO] Running DBSCAN (eps={eps}, min_samples={min_samples})...")
+
     dbscan = DBSCAN(
         eps=eps,
         min_samples=min_samples,
         metric='euclidean',
         n_jobs=1
     )
+
     cluster_labels = dbscan.fit_predict(embeddings)
+
     print("[INFO] DBSCAN completed.")
 
-    true_labels = [dataset_test[i][1] for i in range(len(dataset_test))]
+# ====================================================================
+#   METRICHE
+# ====================================================================
+
+    true_labels = [
+        dataset_test[i][1]
+        for i in range(len(dataset_test))
+    ]
 
     true_labels_filtered    = []
     cluster_labels_filtered = []
     discarded_pr            = 0
 
-    for t, c in zip(true_labels, cluster_labels):
-        if c != -1:
-            true_labels_filtered.append(t)
-            cluster_labels_filtered.append(c)
+    for true_label, cluster_label in zip(true_labels, cluster_labels):
+        if cluster_label != -1:
+            true_labels_filtered.append(true_label)
+            cluster_labels_filtered.append(cluster_label)
         else:
             discarded_pr += 1
 
-    metrics = calc_evaluation_metrics(true_labels_filtered, cluster_labels_filtered)
+    metrics = calc_evaluation_metrics(
+        true_labels_filtered,
+        cluster_labels_filtered
+    )
+
+    n_real_classes = len(set(true_labels))
+    n_clusters_found = len(set(cluster_labels_filtered))
+
+    print("\n================ RISULTATI ================")
     print("CALCOLO SENZA RUMORE")
-    print(f"Probe considerate rumore: {discarded_pr} --> {100*(discarded_pr/n_probe_test):.2f}%")
-    print(f"ARI:          {metrics['ari']:.4f}")
-    print(f"NMI:          {metrics['nmi']:.4f}")
-    print(f"Homogeneity:  {metrics['homogeneity']:.4f}")
-    print(f"Completeness: {metrics['completeness']:.4f}")
-    print(f"V-measure:    {metrics['v_measure']:.4f}")
-    print(f"Numero di classi: {len(set(true_labels))}")
-    print(f"Cluster trovati:  {len(set(cluster_labels_filtered))}")
+    print(f"Train scenarios: {train_scenarios}")
+    print(f"Test scenarios:  {test_scenarios}")
+    print(f"Probe train:     {n_probe_train}")
+    print(f"Probe test:      {n_probe_test}")
+    print(f"Input features:  {n_features}")
+    print(f"Embedding size:  {emb_size}")
+    print(f"eps:             {eps}")
+    print(f"min_samples:     {min_samples}")
+    print(f"Probe considerate rumore: {discarded_pr} --> {100 * (discarded_pr / n_probe_test):.2f}%")
+    print(f"ARI:             {metrics['ari']:.4f}")
+    print(f"NMI:             {metrics['nmi']:.4f}")
+    print(f"Homogeneity:     {metrics['homogeneity']:.4f}")
+    print(f"Completeness:    {metrics['completeness']:.4f}")
+    print(f"V-measure:       {metrics['v_measure']:.4f}")
+    print(f"Numero di classi reali: {n_real_classes}")
+    print(f"Cluster trovati:        {n_clusters_found}")
+    print("===========================================\n")
+
+# ====================================================================
+#   OUTPUT DETTAGLIATO PER PROBE
+# ====================================================================
 
     output_values = []
+
     for i, (_, label, mac_address) in enumerate(dataset_test):
         output_values.append({
             "sample_index": i,
-            "mac_address":  mac_address,
-            "true_label":   label,
-            "cluster":      cluster_labels[i],
+            "mac_address": mac_address,
+            "true_label": label,
+            "cluster": cluster_labels[i],
         })
 
     df = pd.DataFrame(output_values).sort_values("true_label")
+
     print(df)
 
-    output_path = Path("transformer/clustering_output/output_s0_train_s1_test.csv")
+# ====================================================================
+#   SALVATAGGIO OUTPUT
+# ====================================================================
+
+    train_name = "_".join(map(str, train_scenarios))
+    test_name = "_".join(map(str, test_scenarios))
+
+    output_path = Path(
+        f"transformer/clustering_output/output_train_{train_name}_test_{test_name}.csv"
+    )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
+
     print(f"[INFO] Results saved to {output_path}")
