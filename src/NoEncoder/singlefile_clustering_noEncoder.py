@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SRC_DIR))
+
 from torch.utils.data import DataLoader
 import torch
 import pandas as pd
@@ -29,7 +35,7 @@ if __name__ == '__main__':
 #                   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
     
-    probe_file = "Dataset/dataset_burst_json_veri/scenario_7_burst_features.json"  # Percorso del file pcap da cui estrarre i dati
+    probe_file = "/home/giuff/Tesi/TransformerTry/Dataset/Bonn_Dataset/json/samsung_a51_not_associated_screen_off_powersave_off_macrand_on_f5e5a79d.json"  # Percorso del file pcap da cui estrarre i dati
     output_json = ""  # Percorso del file JSON di output
     isPcap = False                 # Se True, tratta i file come file pcap, altrimenti come file di bursts di PR
     batch_size = 64                #TODO: definire un batch size adeguato, considerando la dimensione del dataset
@@ -106,8 +112,11 @@ if __name__ == '__main__':
             "cluster": cluster_labels[i],           
         })
                 
-    df = pd.DataFrame(output_values)            
-    df = df.sort_values("cluster")           
-    print(df)           
-                
-    df.to_csv("transformer/clustering_output/outputClustering.csv", index=False)         
+    df = pd.DataFrame(output_values)
+    df = df.sort_values("cluster")
+    print(df)
+
+    output_csv = "/home/giuff/Tesi/TransformerTry/transformer/clustering_output/outputClustering.csv"
+    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+
+    df.to_csv(output_csv, index=False)     

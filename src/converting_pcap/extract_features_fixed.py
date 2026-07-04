@@ -4,8 +4,11 @@ import os
 
 import pyshark as ps
 from datetime import datetime
-
-from .convert_hexadecimal_fixed import convert_hexadecimal, convert_hexadecimal_list
+import json
+try:
+    from .convert_hexadecimal_fixed import convert_hexadecimal, convert_hexadecimal_list
+except:
+    from convert_hexadecimal_fixed import convert_hexadecimal, convert_hexadecimal_list
 
 
 def extract_from_pcap(pcap_file, max_packets=None):
@@ -345,11 +348,42 @@ def extract_ie191_value(tag_param):
 
 
 if __name__ == "__main__":
-    packet_list_summary = extract_from_pcap(pcap_file="/home/giuff/tshark/pcapfiles/example.pcap")
 
-    print("Printing the first 5 packets with their features:")
+    # ====================================================================
+    #                   PARAMETRI CONVERSIONE DATASET BONN
+    # ====================================================================
 
-    for i, packet in enumerate(packet_list_summary[:5]):
-        print(f"Packet {i+1}: ")
-        for key, value in packet.items():
-            print(f"  {key}: {value}")
+    input_dir = "/home/giuff/Tesi/TransformerTry/Dataset/Bonn_Dataset/dataset-structure-pseudonymized"
+    output_dir = "/home/giuff/Tesi/TransformerTry/Dataset/Bonn_Dataset/json"
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    pcap_files = []
+
+    for root, dirs, files in os.walk(input_dir):
+        for file in files:
+            if file.endswith(".pcap"):
+                pcap_files.append(os.path.join(root, file))
+
+    print(f"[INFO] Trovati {len(pcap_files)} file PCAP")
+
+    for i, pcap_file in enumerate(pcap_files, start=1):
+        pcap_name = os.path.basename(pcap_file)
+        json_name = os.path.splitext(pcap_name)[0] + ".json"
+        output_json = os.path.join(output_dir, json_name)
+
+        print(f"\n[{i}/{len(pcap_files)}] Converto:")
+        print(f"PCAP: {pcap_file}")
+        print(f"JSON: {output_json}")
+
+        dataset = extract_from_pcap(pcap_file=pcap_file)
+
+        for record in dataset:
+            record["label"] = -1
+
+        with open(output_json, "w") as f:
+            json.dump(dataset, f, indent=4)
+
+        print(f"[OK] Salvati {len(dataset)} record")
+
+    print("\nConversione completata.")

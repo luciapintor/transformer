@@ -103,7 +103,7 @@ if __name__ == "__main__":
 #   PARAMETRI DATASET
 # ====================================================================
 
-    scenarios_to_cluster     = [0,1,2,3]
+    scenarios_to_cluster     = [3,6]
     batch_size               = 256
     preprocess                = True
     include_mac_features      = False
@@ -119,7 +119,6 @@ if __name__ == "__main__":
     # MIN_SAMPLES DINAMICO
     # -------------------------------------------------------------------
     MIN_SAMPLES_COEF = 0.28
-    MIN_SAMPLES_COEF = 0
     MIN_SAMPLES_FLOOR = 4   # non scendere mai sotto questo valore
     
 

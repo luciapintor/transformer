@@ -34,6 +34,81 @@ class ConstantFeatureFilteredDataset(Dataset):
         return filtered_record, label, mac_address
 
 
+class MinMaxNormalizedDataset(Dataset):
+    """Wrapper che applica una normalizzazione MinMax feature-wise già calcolata sul TRAIN."""
+
+    def __init__(self, base_dataset, feature_names, feature_min, feature_max):
+        self.base_dataset = base_dataset
+        self.feature_names = list(feature_names)
+        self.feature_min = np.asarray(feature_min, dtype=np.float32)
+        self.feature_max = np.asarray(feature_max, dtype=np.float32)
+        self.feature_range = self.feature_max - self.feature_min
+
+        # Evita divisioni per zero. Dopo la rimozione delle feature costanti non dovrebbe servire,
+        # ma lo lasciamo per sicurezza.
+        self.feature_range[self.feature_range == 0.0] = 1.0
+
+    def __len__(self):
+        return len(self.base_dataset)
+
+    def __getitem__(self, idx):
+        record, label, mac_address = self.base_dataset[idx]
+
+        values = np.array(
+            [record.get(name, 0.0) for name in self.feature_names],
+            dtype=np.float32
+        )
+        values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
+        values = (values - self.feature_min) / self.feature_range
+        values = np.clip(values, 0.0, 1.0)
+
+        normalized_record = {
+            name: float(value)
+            for name, value in zip(self.feature_names, values)
+        }
+
+        return normalized_record, label, mac_address
+
+
+def compute_feature_minmax(dataset, feature_names, batch_size):
+    """Calcola min e max delle feature usando solo il TRAIN set."""
+
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=ProbeDataset.collate_probe_batch
+    )
+
+    feature_min = None
+    feature_max = None
+
+    for batch in loader:
+        features_batch = batch[0]
+
+        if isinstance(features_batch, torch.Tensor):
+            features_batch = features_batch.detach().cpu().numpy()
+
+        features_batch = np.asarray(features_batch, dtype=np.float32)
+        features_batch = np.nan_to_num(features_batch, nan=0.0, posinf=0.0, neginf=0.0)
+
+        batch_min = np.min(features_batch, axis=0)
+        batch_max = np.max(features_batch, axis=0)
+
+        if feature_min is None:
+            feature_min = batch_min
+            feature_max = batch_max
+        else:
+            feature_min = np.minimum(feature_min, batch_min)
+            feature_max = np.maximum(feature_max, batch_max)
+
+    print("[INFO] Normalizing input features with MinMaxScaler fitted on TRAIN set...")
+    print(f"[INFO] Feature min range: [{feature_min.min():.4f}, {feature_min.max():.4f}]")
+    print(f"[INFO] Feature max range: [{feature_max.min():.4f}, {feature_max.max():.4f}]")
+
+    return feature_min, feature_max
+
+
 def compute_non_constant_feature_names(dataset, batch_size, variance_threshold=1e-12):
     """Calcola sul TRAIN le feature non costanti, senza materializzare tutto il dataset."""
 
@@ -130,22 +205,23 @@ if __name__ == '__main__':
 #   PARAMETRI DATASET TRAIN E TEST
 # ====================================================================
 
-    train_scenarios      = [0, 1]
+    train_scenarios      = [6]
     test_scenarios       = [3]
 
     batch_size           = 256
     preprocess           = True
     include_mac_features = False
-    normalize            = True
+    normalize_embeddings = False
+    normalize_input_features = True
     remove_constant_features = True
 
 # ====================================================================
 #   PARAMETRI MODELLO
 # ====================================================================
 
-    emb_size      = 16
+    emb_size      = 8
     hidden_dim    = 128
-    epochs        = 50
+    epochs        = 20
     learning_rate = 1e-3
 
 # ====================================================================
@@ -155,7 +231,13 @@ if __name__ == '__main__':
     eps = 0.001
 
     # min_samples dinamico 
-    MIN_SAMPLES_COEF = 0
+    use_dynamic_minsample = True
+
+    if use_dynamic_minsample:
+        MIN_SAMPLES_COEF = 0.28
+    else:
+        MIN_SAMPLES_COEF = 0
+
     MIN_SAMPLES_FLOOR = 4
 
 # ====================================================================
@@ -214,6 +296,39 @@ if __name__ == '__main__':
         n_features = len(first_record)
 
     print(f"[INFO] Number of input features: {n_features}")
+
+# ====================================================================
+#   NORMALIZZAZIONE FEATURE DI INPUT
+# ====================================================================
+
+    # Importante: lo scaler viene calcolato SOLO sul train set e poi applicato
+    # sia al train che al test. In questo modo non usiamo informazione del test
+    # per addestrare/normalizzare il modello.
+    if normalize_input_features:
+        if remove_constant_features:
+            feature_names_for_scaler = selected_feature_names
+        else:
+            feature_names_for_scaler = sorted(dataset_train[0][0].keys())
+
+        feature_min, feature_max = compute_feature_minmax(
+            dataset_train,
+            feature_names=feature_names_for_scaler,
+            batch_size=batch_size
+        )
+
+        dataset_train = MinMaxNormalizedDataset(
+            dataset_train,
+            feature_names_for_scaler,
+            feature_min,
+            feature_max
+        )
+
+        dataset_test = MinMaxNormalizedDataset(
+            dataset_test,
+            feature_names_for_scaler,
+            feature_min,
+            feature_max
+        )
 
 # ====================================================================
 #   DATALOADER
@@ -276,7 +391,7 @@ if __name__ == '__main__':
 #   NORMALIZZAZIONE EMBEDDING
 # ====================================================================
 
-    if normalize:
+    if normalize_embeddings:
         print("[INFO] Applying MinMaxScaler to embeddings...")
         scaler = MinMaxScaler()
         embeddings = scaler.fit_transform(embeddings).astype(np.float32)
